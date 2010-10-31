@@ -1,0 +1,5 @@
+This is a simple c lib for controlling your fnordlichts.
+It's including a small cli program and a vu meter to show your audio level on the lights.
+
+To connect the fnordlichts to your computer you need a serial port or an USB to RS232 adapter and a RS232 to TTL level shifter (MAX232).
+Connect your CTS line to the interrupt line of the fnordlicht bus to be able to count the devices on the bus.
