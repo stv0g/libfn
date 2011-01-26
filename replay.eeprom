@@ -1,0 +1,22 @@
+# This CSV file is used to easily edit the slots of your fnordlichter
+# Author: Steffen Vogel <info@steffenvogel.de>
+#
+# There are 6 fields:
+#   slot  | slot in the EEPROM (0-59)
+# address | address of the fnordlicht on the bus (0-254, 255 for broadcast)
+#   color | color in hex format (ex. 'ff31A4')
+#   step  | increment step for fading
+#   delay | delay between steps when fading (in 10ms)
+#   pause | time to wait before fading to next color (in 100ms)
+#
+# Lines beginning with a '#' are ignored as comments
+# 
+# https://github.com/fd0/fnordlicht/raw/master/doc/PROTOCOL
+#
+#slot;address;color;step;delay;pause
+0;255;ffffff;30;2;5
+1;255;000000;30;2;5
+2;255;00ff00;30;2;10
+3;255;00ffff;30;2;10
+4;255;ffff00;30;2;10
+

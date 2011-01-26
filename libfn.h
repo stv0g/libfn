@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "color.h"
+#include "static_programs.h"
 #include "remote-proto.h"
 
 #define FN_BAUDRATE B19200

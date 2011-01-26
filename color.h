@@ -26,10 +26,6 @@
 #ifndef COLOR_H
 #define COLOR_H
 
-#if defined(PWM_CHANNELS) && PWM_CHANNELS != 3
-#error "PWM_CHANNELS is not 3, this is unsupported!"
-#endif
-
 struct rgb_color_t
 {
     union {

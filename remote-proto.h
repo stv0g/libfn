@@ -27,6 +27,9 @@
 #define REMOTE_SYNC_LEN 15
 #define REMOTE_SYNC_BYTE 0x1b
 
+/* number of color-configurations stored in EEPROM */
+#define CONFIG_EEPROM_COLORS 60
+
 /* max mode for startup configuration is 1 */
 #define REMOTE_STARTUP_MAX_MODE     1
 /* maximum parameter size (for copy loop), size of structure storage_config_t,
@@ -59,7 +62,7 @@
 #define REMOTE_CMD_FLASH            0x86
 #define REMOTE_CMD_ENTER_APP        0x87
 
-#define REMOTE_ADDR_BROADCAST 0xff
+#define REMOTE_ADDR_BROADCAST       0xff
 
 /* normal commands */
 struct remote_msg_t
@@ -135,7 +138,7 @@ struct remote_msg_start_program_t
     uint8_t address;
     uint8_t cmd;
     uint8_t script;
-//    union program_params_t params;
+    union program_params_t params;
 };
 
 struct remote_msg_stop_t
