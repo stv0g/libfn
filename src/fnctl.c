@@ -67,7 +67,7 @@ struct rgb_color_t parse_color(char * identifier) {
 	if (strlen(identifier) != 6) {
 	        fprintf(stderr, "invalid color definition: %s", identifier);
 	}
-		
+
 	sscanf(identifier, "%2x%2x%2x", (unsigned int *) (&color.red), (unsigned int *) (&color.green), (unsigned int *) (&color.blue));
 	return color;
 }
@@ -109,7 +109,7 @@ int main(int argc, char ** argv) {
 	uint8_t slot = 0;
 	uint8_t delay = 0;
 	uint8_t pause = 0;
-	
+
 	char mask[254] = "";
 	char filename[1024] = "";
 
@@ -180,15 +180,15 @@ int main(int argc, char ** argv) {
 			case 'c':
 				color = parse_color(optarg);
 				break;
-				
+
 			case 'f':
 				params.replay.start = atoi(optarg);
 				break;
-				
+
 			case 't':
 				params.replay.end = atoi(optarg);
 				break;
-			
+
 			case 'r':
 				if (strcmp("none", optarg) == 0) {
 					params.replay.repeat = REPEAT_NONE;
@@ -221,7 +221,7 @@ int main(int argc, char ** argv) {
 			case 'P':
 				strcpy(port, optarg);
 				break;
-				
+
 			case 'F':
 				strcpy(filename, optarg);
 				break;
