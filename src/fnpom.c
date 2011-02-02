@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
 #include <json/json.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -22,6 +23,16 @@ char * http_get_body(char * response) {
 	}
 	
 	return NULL;
+}
+
+struct rgb_color_t calc_gradient(double quota, struct rgb_color_t start, struct rgb_color_t end) {
+	struct rgb_color_t gradient = start;
+	
+	gradient.red = (end.red - start.red) * quota;
+	gradient.green = (end.green - start.green) * quota;
+	gradient.blue = (end.blue - start.blue) * quota;
+	
+	return gradient;
 }
 
 char * http_get(char * response, size_t bytes, char * host, char * port, char * path) {
@@ -58,39 +69,82 @@ char * http_get(char * response, size_t bytes, char * host, char * port, char * 
 int main(int argc, char * argv[]) {
 	char host[] = "volkszaehler.org";
 	char port[] = "80";
-	char path[] = "/demo/backend.php/data/";
+	char path[] = "/demo/backend.php/data";
 	char uuid[] = "12345678-1234-1234-1234-123456789012";
+	char device[] = "/dev/ttyUSB0";
 	char response[8192], url[1024],  * json;
+	
+	int debug = 1, fd;
 
 	struct json_tokener * json_tok;
 	struct json_object * json_obj;
+	struct termios oldtio;
+	struct rgb_color_t start = {0, 0xff, 0};
+	struct rgb_color_t end = {0xff, 0, 0};
+
+	/* build url path */	
+	sprintf(url, "%s/%s.json?from=last%%20year&tuples=1", path, uuid); /* store request uri in buffer */
 	
-	sprintf(url, "%s/%s.txt?from=yesterday&tuples=1", path, uuid); /* store request uri in buffer */
+	if (debug) printf("url: http://%s:%s%s\n", host, port, url);
+	
+	/* get json */
 	http_get(response, sizeof(response), host, port, url); /* fetch json data to buffer */
 	json = http_get_body(response); /* get pointer to http body */
-	
+
+	/* parse json */	
 	json_tok = json_tokener_new();
 	json_obj = json_tokener_parse_ex(json_tok, json, strlen(json));
 	
 	if (json_tok->err != json_tokener_success) {
-		json_obj = error_ptr(-json_tok->err);
+		fprintf(stderr, "failed to parse json: %s\n", json_tokener_errors[json_tok->err]);
 		exit(-1);
 	}
-		
-	/* printf("%s\n", json_object_to_json_string(json_obj)); */
+	
+	if (debug) printf("%s\n", json_object_to_json_string(json_obj));
 	
 	json_obj = json_object_object_get(json_obj, "data");
-	json_obj = json_object_object_get(json_obj, "last");
 	
-	if (json_object_get_type(json_obj) != json_type_double) {
-		fprintf(stderr, "invalid json!\n");
-		exit(-1);
+	double last = json_object_get_double(json_object_object_get(json_obj, "last"));
+	double max = json_object_get_double(json_object_object_get(json_object_object_get(json_obj, "max"), "value"));
+	double min = json_object_get_double(json_object_object_get(json_object_object_get(json_obj, "min"), "value"));
+	
+	/* calc quota and color for lighting */
+	double quota = (last - min) / (max - min);
+	
+	if (debug) {
+		printf("Last value: %.2f\n", last);
+		printf("Min value: %.2f\n", min);
+		printf("Max value: %.2f\n", max);
+		printf("Quota: %d%%\n", (int) (quota*100));
 	}
 	
-	printf("Last value: %.2f\n", json_object_get_double(json_obj));
+	struct rgb_color_t gradient = calc_gradient(quota, start, end);
+	
+	if (debug) printf("resulting color: #%0X%0X%0X\n", gradient.red, gradient.green, gradient.blue);
+	
+	/* fade fnordlichts */
+	if (debug) printf("connect via rs232: %s\n", device);
+	
+	fd = open(device, O_RDWR | O_NOCTTY);
+	if (fd < 0) {
+		perror(port);
+		exit(-1);
+	}
+	oldtio = fn_init(fd);
+	fn_sync(fd);
+	
+	struct remote_msg_fade_rgb_t fn_cmd;
+	fn_cmd.step = 255;
+	fn_cmd.delay = 0;
+	fn_cmd.color = gradient;
+	fn_cmd.address = 255;
+	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	
+	fn_send(fd, &fn_cmd);
 	
 	/* housekeeping */
-	json_tokener_free(json_tok);
+	json_tokener_free(json_tok); /* free json objects */
+	tcsetattr(fd, TCSANOW, &oldtio); /* reset serial port */
 	
 	return 0;
 }
