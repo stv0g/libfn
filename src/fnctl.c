@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "libfn.h"
+#include "../lib/libfn.h"
 
 /* local commands (>= 0xA0) */
 #define LOCAL_CMD_EEPROM 0xA0

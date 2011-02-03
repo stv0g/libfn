@@ -44,6 +44,7 @@ char * http_get(char * response, size_t bytes, char * host, char * port, char * 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC;    /* both IPv4 & IPv6 */
 	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
 
 	getaddrinfo(host, port, &hints, &res);
 
@@ -59,7 +60,11 @@ char * http_get(char * response, size_t bytes, char * host, char * port, char * 
 	send(sd, request, strlen(request), 0);
 
 	/* receive data */
-	do { count = recv(sd, response, bytes, 0); } while (count > 0);
+	while (count = recv(sd, response, bytes, 0) > 0)
+	if (count < 0) {
+		perror("Error receiving data");
+		exit(-1);
+	}
 	/* close socket */
 	close(sd);
 	
@@ -127,20 +132,24 @@ int main(int argc, char * argv[]) {
 	
 	fd = open(device, O_RDWR | O_NOCTTY);
 	if (fd < 0) {
-		perror(port);
+		perror(device);
 		exit(-1);
 	}
 	oldtio = fn_init(fd);
 	fn_sync(fd);
 	
-	struct remote_msg_fade_rgb_t fn_cmd;
-	fn_cmd.step = 255;
-	fn_cmd.delay = 0;
-	fn_cmd.color = gradient;
-	fn_cmd.address = 255;
-	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	struct remote_msg_fade_rgb_t fn_cmd = {
+		255,			/* address */
+		REMOTE_CMD_FADE_RGB,	/* command */
+		255,			/* step */
+		0,			/* delay */
+		gradient		/* color */
+	};
 	
-	fn_send(fd, &fn_cmd);
+	if (fn_send(fd, (struct remote_msg_t *) &fn_cmd) < 0) {
+		perror(device);
+		exit(-1);
+	}
 	
 	/* housekeeping */
 	json_tokener_free(json_tok); /* free json objects */

@@ -16,12 +16,15 @@ fnvum_fftw: fnvum_fftw.c libfn.c
 	
 fnpom: fnpom.c libfn.c
 	$(CC) $(LDFLAGS) fnpom.o libfn.o -o bin/fnpom -l json
+	
+fnctl: libfn.c fnctl.c
+	$(CC) $(LDFLAGS) fnctl.o libfn.o -o bin/fnctl
 
 fnvum.c:
 	$(CC) $(CFLAGS) src/fnvum.c -o fnvum.o
 	
 fnpom.c:
-	$(CC) $(CFLAGS) src/fnpom.c -o fnpom.o
+	$(CC) $(CFLAGS) src/fnpom.c -o fnpom.o -g
 	
 fnvum_fftw.c:
 	$(CC) $(CFLAGS) src/fnvum_fftw.c -o fnvum_fftw.o -g
