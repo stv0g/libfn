@@ -1,6 +1,7 @@
 #include <stdio.h>   /* Standard input/output definitions */
 #include <termios.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <getopt.h>
 
@@ -113,7 +114,6 @@ int main(int argc, char ** argv) {
 	char mask[254] = "";
 	char filename[1024] = "";
 
-	enum connection_t con_mode = RS232;
 	char host[255] = DEFAULT_HOST;
 	char port[255] = DEFAULT_PORT;
 	char device[255] = DEFAULT_DEVICE;
@@ -125,6 +125,7 @@ int main(int argc, char ** argv) {
 	memset(&msg, 0, sizeof msg);
 
 	/* connection */
+	enum connection_t con_mode = RS232;
 	int fd;
 	struct addrinfo hints, *res;
 	struct termios oldtio;
@@ -264,6 +265,7 @@ int main(int argc, char ** argv) {
 	}
 
 	fn_sync(fd);
+	usleep(25000);
 
 	/* check address */
 	if (address > FN_MAX_DEVICES+1) {

@@ -18,36 +18,24 @@
 #include <pulse/gccmacro.h>
 #include <fftw3.h>
 
-#define N		512
+#define N		2048
 #define SAMPLING_RATE	44100
 
-#define MIN_FREQ	50
+#define MIN_FREQ	70
 #define MAX_FREQ	9000
 
-#define MIN_K		(MIN_FREQ*N/SAMPLING_RATE)+1
+#define MIN_K		(MIN_FREQ*N/SAMPLING_RATE)
 #define MAX_K		(MAX_FREQ*N /SAMPLING_RATE)
 
-#define LINE_WIDTH	4
+#define LINE_WIDTH	1
 #define SCREEN_WIDTH	LINE_WIDTH*(MAX_K - MIN_K)
 #define SCREEN_HEIGHT	SCREEN_WIDTH/2
+#define VUM_HEIGHT	SCREEN_HEIGHT/6
 
 #define TITLE		"fnordlicht visualization"
 
 double normalize_auditory(double freq, double spl) {
 	return spl; // TODO implement
-}
-
-void show_level(SDL_Surface *dst, float level) {
-	SDL_Rect rect = dst->clip_rect;
-	uint32_t color = SDL_MapRGB(dst->format, 0xff, 0, 0); // TODO define via phase
-	uint32_t background = SDL_MapRGB(dst->format, 0, 0, 0);
-
-	SDL_FillRect(dst, &rect, background);
-
-	rect.w *= level;
-
-	SDL_FillRect(dst, &rect, color);
-	SDL_Flip(dst);
 }
 
 struct rgb_color_t hsv2rgb(struct hsv_color_t hsv) {
@@ -75,52 +63,103 @@ struct rgb_color_t hsv2rgb(struct hsv_color_t hsv) {
 	return rgb;
 }
 
-uint32_t phasor2color(complex phasor, SDL_PixelFormat *format) {
+struct rgb_color_t phasor2color(complex phasor) {
 	struct hsv_color_t hsv;
-	struct rgb_color_t rgb;
 	
 	hsv.hue = 180*(carg(phasor)+M_PI)/M_PI;
 	hsv.saturation = 255;
 	hsv.value = 255;
 	
-	rgb = hsv2rgb(hsv);
+	return hsv2rgb(hsv);
+}
 
-	return SDL_MapRGB(format, rgb.red, rgb.green, rgb.blue);
+struct rgb_color_t level2color(double level) {
+	struct hsv_color_t hsv;
+	
+	hsv.hue = level * 360;
+	hsv.saturation = 255;
+	hsv.value = 255;
+	
+	return hsv2rgb(hsv);
 }
 
 void show_spectrum(SDL_Surface * dst, complex * fft_data) {
-	SDL_Rect rect;
+	struct rgb_color_t rgb;
 	uint32_t background = SDL_MapRGB(dst->format, 0, 0, 0);
-
+	uint32_t foreground;
 	SDL_FillRect(dst, &dst->clip_rect, background);
-	
+
+	SDL_Rect rect;	
 	rect.w = LINE_WIDTH;
        	
 	int k;
 	for (k = MIN_K; k <= MAX_K; k++) {
-		double ampl = cabs(fft_data[k]);
+		double ampl = cabs(fft_data[k]) / 500000;
+		rect.x = (k - MIN_K) * LINE_WIDTH;
+		rect.h = ampl * (SCREEN_HEIGHT - VUM_HEIGHT);
+		rect.y = (SCREEN_HEIGHT - VUM_HEIGHT) - rect.h;
 		
-		rect.x = (k - MIN_K + 1) * LINE_WIDTH;
-		
-		rect.h = (ampl / 900000) * SCREEN_HEIGHT;
-		rect.y = SCREEN_HEIGHT - rect.h;
+		rgb = phasor2color(fft_data[k]);
+		foreground = SDL_MapRGB(dst->format, rgb.red, rgb.green, rgb.blue);
 
-	        SDL_FillRect(dst, &rect, phasor2color(fft_data[k], dst->format));
+	        SDL_FillRect(dst, &rect, foreground);
 	}
-       	SDL_Flip(dst);
 }
 
-void fade_level(int fd, float level) {
-	struct remote_msg_fade_rgb_t fncmd;
-	memset(&fncmd, 0, sizeof (struct remote_msg_t));
+void fade_spectrum(int fd, complex * fft_data, int fn_num) {
+	struct remote_msg_fade_rgb_t fn_cmd;
+	memset(&fn_cmd, 0, sizeof (struct remote_msg_t));
 
-	fncmd.color.red = fncmd.color.green = fncmd.color.blue = (uint8_t) 255.0 * level;
-	fncmd.address = 255;
-	fncmd.cmd = REMOTE_CMD_FADE_RGB;
-	fncmd.step = 25;
-	fncmd.delay = 0;
+	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	fn_cmd.step = 200;
+	fn_cmd.delay = 0;
 
-	fn_send(fd, (struct remote_msg_t *) &fncmd);
+	int k;
+	for (k = 0; k < fn_num; k++) {
+		double ampl = 0;
+		int i;
+		for (i = MIN_K+k*(MAX_K-MIN_K)/fn_num; i < (k+1)*(MAX_K-MIN_K)/fn_num; i++) {
+			ampl += cabs(fft_data[i]);
+		}
+		ampl /= 1000000*fn_num;
+		
+		fn_cmd.color.red = 255 * ampl;
+		fn_cmd.color.green = 255 * ampl;
+		fn_cmd.color.blue = 255 * ampl;
+		
+		fn_cmd.address = k;
+		fn_send(fd, (struct remote_msg_t *) &fn_cmd);
+	}
+}
+
+void show_level(SDL_Surface *dst, float level) {
+	SDL_Rect rect = {0, SCREEN_HEIGHT - VUM_HEIGHT, SCREEN_WIDTH, VUM_HEIGHT};
+	
+	struct rgb_color_t rgb = level2color(level);
+	uint32_t background = SDL_MapRGB(dst->format, 0, 0, 0);
+	uint32_t foreground = SDL_MapRGB(dst->format, rgb.red, rgb.green, rgb.blue);
+
+	SDL_FillRect(dst, &rect, background);
+	rect.w *= level;
+	SDL_FillRect(dst, &rect, foreground);
+}
+
+void fade_level(int fd, double level) {
+	struct remote_msg_fade_rgb_t fn_cmd;
+	struct rgb_color_t rgb = level2color(level);
+	
+	memset(&fn_cmd, 0, sizeof (struct remote_msg_t));
+	
+	fn_cmd.color.red = rgb.red * level;
+	fn_cmd.color.green = rgb.blue * level;
+	fn_cmd.color.blue = rgb.blue * level;
+
+	fn_cmd.address = 255;
+	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	fn_cmd.step = 200;
+	fn_cmd.delay = 0;
+
+	fn_send(fd, (struct remote_msg_t *) &fn_cmd);
 }
 
 int main(int argc, char *argv[]) {
@@ -135,8 +174,7 @@ int main(int argc, char *argv[]) {
 	SDL_Surface *screen = NULL;
 	SDL_Event event;
 
-	int error, counter = 0, fd = -1;
-	uint32_t level;
+	int error, counter = 0, fd = -1, fn_num;
 	int16_t * pcm_data;
 	complex * fft_data;
         fftw_plan fft_plan;
@@ -150,6 +188,10 @@ int main(int argc, char *argv[]) {
 		}
 
 		fn_init(fd);
+		fn_sync(fd);
+		fn_num = fn_count_devices(fd);
+		printf("found %d fnordlichts\n", fn_num);
+		usleep(25000);
 	}
 
 	/* init screen & window */
@@ -177,7 +219,7 @@ int main(int argc, char *argv[]) {
 		exit(-1);
 	}
 	pa_simple_flush(s, &error); /* flush audio buffer */
-
+	
 	while (1) {
 		counter++;
 
@@ -206,13 +248,16 @@ int main(int argc, char *argv[]) {
 			fft_data[index] = (double) pcm_data[index];
 		}
 		
-		level = (float) sum / (N * pow(2, 15));
-		//show_level(screen, level * 1.8);
-		//fade_level(fd, level);
-
 		/* execute fftw plan */
 		fftw_execute(fft_plan);
+		level = (float) sum / (N * pow(2, 15)) * 2;
+		
+		//if (counter % 2 == 0) fade_spectrum(fd, fft_data, fn_num);
+		fade_level(fd, level);
+
 		show_spectrum(screen, fft_data);
+		show_level(screen, level);		
+		SDL_Flip(screen);
 
 		//printf("level: %f \tsum: %d\t max: %d\n", level, sum, max);
 	}
@@ -221,7 +266,6 @@ int main(int argc, char *argv[]) {
 	SDL_Quit();
 	free(pcm_data);
 	fftw_free(fft_data);
-	fftw_destroy(fft_plan);
 	fftw_cleanup();
 
 	return 0;

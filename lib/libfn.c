@@ -5,26 +5,24 @@
 #include <stdio.h>
 
 struct termios fn_init(int fd) {
-        struct termios oldtio, newtio;
-        
-        tcgetattr(fd, &oldtio); 	/* save current port settings */
-        
-        memset(&newtio, 0, sizeof(newtio));
-        newtio.c_cflag = CS8 | CLOCAL | CREAD;
-        newtio.c_iflag= 0;
-        newtio.c_oflag= 0;
-        newtio.c_lflag= 0;
+	struct termios oldtio, newtio;
 
-        newtio.c_cc[VMIN] = 1;
-        newtio.c_cc[VTIME] = 5;
+	tcgetattr(fd, &oldtio); 	/* save current port settings */
+
+	memset(&newtio, 0, sizeof(newtio));
+	newtio.c_cflag = CS8 | CLOCAL | CREAD;
+	newtio.c_iflag= 0;
+	newtio.c_oflag= 0;
+	newtio.c_lflag= 0;
+
+	newtio.c_cc[VMIN] = 1;
+	newtio.c_cc[VTIME] = 5;
 
 	cfsetispeed(&newtio, FN_BAUDRATE);
 	cfsetospeed(&newtio, FN_BAUDRATE);
-         
-        tcflush(fd, TCIFLUSH);
-        tcsetattr(fd, TCSANOW, &newtio);
 
-	fn_sync(fd);
+	tcflush(fd, TCIFLUSH);
+	tcsetattr(fd, TCSANOW, &newtio);
 
 	return oldtio;
 }
@@ -64,7 +62,7 @@ uint8_t fn_count_devices(int fd) {
 		else {
 			break;
 		}
-	} 
+	}
 
 	return msg.address;
 }
