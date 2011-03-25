@@ -18,7 +18,7 @@
 #include <pulse/gccmacro.h>
 #include <fftw3.h>
 
-#define N		2048
+#define N		1024
 #define SAMPLING_RATE	44100
 
 #define MIN_FREQ	70
@@ -27,7 +27,7 @@
 #define MIN_K		(MIN_FREQ*N/SAMPLING_RATE)
 #define MAX_K		(MAX_FREQ*N /SAMPLING_RATE)
 
-#define LINE_WIDTH	1
+#define LINE_WIDTH	2
 #define SCREEN_WIDTH	LINE_WIDTH*(MAX_K - MIN_K)
 #define SCREEN_HEIGHT	SCREEN_WIDTH/2
 #define VUM_HEIGHT	SCREEN_HEIGHT/6
@@ -146,7 +146,8 @@ void show_level(SDL_Surface *dst, float level) {
 
 void fade_level(int fd, double level) {
 	struct remote_msg_fade_rgb_t fn_cmd;
-	struct rgb_color_t rgb = level2color(level);
+	//struct rgb_color_t rgb = level2color(level);
+	struct rgb_color_t rgb = {255, 255, 255};
 	
 	memset(&fn_cmd, 0, sizeof (struct remote_msg_t));
 	
@@ -253,7 +254,7 @@ int main(int argc, char *argv[]) {
 		level = (float) sum / (N * pow(2, 15)) * 2;
 		
 		//if (counter % 2 == 0) fade_spectrum(fd, fft_data, fn_num);
-		fade_level(fd, level);
+		if (level > 0.05) fade_level(fd, level);
 
 		show_spectrum(screen, fft_data);
 		show_level(screen, level);		

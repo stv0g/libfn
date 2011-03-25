@@ -57,7 +57,7 @@ void show_spectrum(SDL_Surface * dst, complex_t * dft_data) {
        	SDL_Flip(dst);
 }
 
-void fade_level(int fd, y level) {
+void fade_level(int fd, double level) {
 	struct remote_msg_fade_rgb_t fncmd;
 	memset(&fncmd, 0, sizeof(struct remote_msg_t));
 
