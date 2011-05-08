@@ -2,3 +2,5 @@
 *.so
 *.a
 bin/*
+.project
+.cproject

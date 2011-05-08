@@ -18,7 +18,7 @@
 #include <pulse/gccmacro.h>
 #include <fftw3.h>
 
-#define N		1024
+#define N		512
 #define SAMPLING_RATE	44100
 
 #define MIN_FREQ	70
