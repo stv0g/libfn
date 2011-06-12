@@ -1,90 +1,183 @@
+/* stdlibs */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <math.h>
+#include <termios.h>
 #include <fcntl.h>
+#include <complex.h>
 
 /* third party libs */
-#include "../lib/libfn.h"
-#include "../lib/dft.h"
-
 #include <SDL/SDL.h>
 #include <pulse/simple.h>
 #include <pulse/error.h>
 #include <pulse/gccmacro.h>
+#include <fftw3.h>
 
-#define BUFFER_SIZE 1024
-#define SAMPLING_RATE 44100
-#define SCREEN_WIDTH (BUFFER_SIZE/2)
-#define SCREEN_HEIGHT (SCREEN_WIDTH/2)
-#define TITLE "fnordlicht vumeter & spectrum"
+#include "libfn.h"
 
-void show_level(SDL_Surface *dst, float level) {
-	SDL_Rect rect = dst->clip_rect;
-	Uint32 color = SDL_MapRGB(dst->format, 0xff, 0, 0);
-	Uint32 background = SDL_MapRGB(dst->format, 0, 0, 0);
+#define N		512
+#define SAMPLING_RATE	44100
 
-	SDL_FillRect(dst, &rect, background);
+#define MIN_FREQ	70
+#define MAX_FREQ	9000
 
-	rect.w *= level;
+#define MIN_K		(MIN_FREQ*N/SAMPLING_RATE)
+#define MAX_K		(MAX_FREQ*N /SAMPLING_RATE)
 
-	SDL_FillRect(dst, &rect, color);
-	SDL_Flip(dst);
+#define LINE_WIDTH	2
+#define SCREEN_WIDTH	LINE_WIDTH*(MAX_K - MIN_K)
+#define SCREEN_HEIGHT	SCREEN_WIDTH/2
+#define VUM_HEIGHT	SCREEN_HEIGHT/6
+
+#define TITLE		"fnordlicht visualization"
+
+double normalize_auditory(double freq, double spl) {
+	return spl; // TODO implement
 }
 
-void show_spectrum(SDL_Surface * dst, complex_t * dft_data) {
-	int k;
+struct rgb_color_t hsv2rgb(struct hsv_color_t hsv) {
+	struct rgb_color_t rgb;
 
-	SDL_Rect rect;
-        Uint32 color = SDL_MapRGB(dst->format, 0xff, 0, 0);
-       	Uint32 background = SDL_MapRGB(dst->format, 0, 0, 0);
+	uint16_t h = hsv.hue % 360;
+	uint8_t s = hsv.saturation;
+	uint8_t v = hsv.value;
+    
+	uint16_t f = ((h % 60) * 255 + 30)/60;
+	uint16_t p = (v * (255-s)+128)/255;
+	uint16_t q = ((v * (255 - (s*f+128)/255))+128)/255;
+	uint16_t t = (v * (255 - ((s * (255 - f))/255)))/255;
+	uint8_t i = h/60;
 
-        SDL_FillRect(dst, &dst->clip_rect, background);
-
-	double ampl;
-       	rect.w = 1;
-
-	for (k = 0; k < SCREEN_WIDTH; k++) {
-		ampl = complex_abs(dft_data[k]);
-		
-		rect.x = k;
-		rect.h = (ampl / 100000) * SCREEN_HEIGHT;
-		rect.y = SCREEN_HEIGHT - rect.h;
-
-	        SDL_FillRect(dst, &rect, color);
+	switch (i) {
+		case 0:	rgb.red = v; rgb.green = t; rgb.blue = p; break;
+		case 1:	rgb.red = q; rgb.green = v; rgb.blue = p; break;
+		case 2:	rgb.red = p; rgb.green = v; rgb.blue = t; break;
+		case 3:	rgb.red = p; rgb.green = q; rgb.blue = v; break;
+		case 4:	rgb.red = t; rgb.green = p; rgb.blue = v; break;
+		case 5:	rgb.red = v; rgb.green = p; rgb.blue = q; break;
 	}
-       	SDL_Flip(dst);
+	
+	return rgb;
+}
+
+struct rgb_color_t phasor2color(complex phasor) {
+	struct hsv_color_t hsv;
+	
+	hsv.hue = 180*(carg(phasor)+M_PI)/M_PI;
+	hsv.saturation = 255;
+	hsv.value = 255;
+	
+	return hsv2rgb(hsv);
+}
+
+struct rgb_color_t level2color(double level) {
+	struct hsv_color_t hsv;
+	
+	hsv.hue = level * 360;
+	hsv.saturation = 255;
+	hsv.value = 255;
+	
+	return hsv2rgb(hsv);
+}
+
+void show_spectrum(SDL_Surface * dst, complex * fft_data) {
+	struct rgb_color_t rgb;
+	uint32_t background = SDL_MapRGB(dst->format, 0, 0, 0);
+	uint32_t foreground;
+	SDL_FillRect(dst, &dst->clip_rect, background);
+
+	SDL_Rect rect;	
+	rect.w = LINE_WIDTH;
+       	
+	int k;
+	for (k = MIN_K; k <= MAX_K; k++) {
+		double ampl = cabs(fft_data[k]) / 500000;
+		rect.x = (k - MIN_K) * LINE_WIDTH;
+		rect.h = ampl * (SCREEN_HEIGHT - VUM_HEIGHT);
+		rect.y = (SCREEN_HEIGHT - VUM_HEIGHT) - rect.h;
+		
+		rgb = phasor2color(fft_data[k]);
+		foreground = SDL_MapRGB(dst->format, rgb.red, rgb.green, rgb.blue);
+
+	        SDL_FillRect(dst, &rect, foreground);
+	}
+}
+
+void fade_spectrum(int fd, complex * fft_data, int fn_num) {
+	struct remote_msg_t fn_cmd;
+	memset(&fn_cmd, 0, sizeof (struct remote_msg_t));
+
+	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	fn_cmd.fade_rgb.step = 200;
+	fn_cmd.fade_rgb.delay = 0;
+
+	int k;
+	for (k = 0; k < fn_num; k++) {
+		double ampl = 0;
+		int i;
+		for (i = MIN_K+k*(MAX_K-MIN_K)/fn_num; i < (k+1)*(MAX_K-MIN_K)/fn_num; i++) {
+			ampl += cabs(fft_data[i]);
+		}
+		ampl /= 1000000*fn_num;
+		
+		fn_cmd.fade_rgb.color.red = 255 * ampl;
+		fn_cmd.fade_rgb.color.green = 255 * ampl;
+		fn_cmd.fade_rgb.color.blue = 255 * ampl;
+		
+		fn_cmd.address = k;
+		fn_send(fd, &fn_cmd);
+	}
+}
+
+void show_level(SDL_Surface *dst, float level) {
+	SDL_Rect rect = {0, SCREEN_HEIGHT - VUM_HEIGHT, SCREEN_WIDTH, VUM_HEIGHT};
+	
+	struct rgb_color_t rgb = level2color(level);
+	uint32_t background = SDL_MapRGB(dst->format, 0, 0, 0);
+	uint32_t foreground = SDL_MapRGB(dst->format, rgb.red, rgb.green, rgb.blue);
+
+	SDL_FillRect(dst, &rect, background);
+	rect.w *= level;
+	SDL_FillRect(dst, &rect, foreground);
 }
 
 void fade_level(int fd, double level) {
-	struct remote_msg_fade_rgb_t fncmd;
-	memset(&fncmd, 0, sizeof(struct remote_msg_t));
+	struct remote_msg_t fn_cmd;
+	struct rgb_color_t rgb = {{{255, 255, 255}}}; // level2color(level);
+	memset(&fn_cmd, 0, sizeof(struct remote_msg_t));
+	
+	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	fn_cmd.address = 255;
+	
+	fn_cmd.fade_rgb.step = 200;
+	fn_cmd.fade_rgb.delay = 0;
+	
+	fn_cmd.fade_rgb.color.red = rgb.red * level;
+	fn_cmd.fade_rgb.color.green = rgb.green * level;
+	fn_cmd.fade_rgb.color.blue = rgb.blue * level;
 
-	fncmd.color.red = fncmd.color.green = fncmd.color.blue = (uint8_t) 255.0 * level;
-	fncmd.address = 255;
-	fncmd.cmd = REMOTE_CMD_FADE_RGB;
-	fncmd.step = 25;
-	fncmd.delay = 0;
-
-	fn_send(fd, (struct remote_msg_t *) &fncmd);
+	fn_send(fd, &fn_cmd);
 }
 
 int main(int argc, char *argv[]) {
 	/* The sample type to use */
 	static const pa_sample_spec ss = {
-		.format = PA_SAMPLE_S16NE,
+		.format = PA_SAMPLE_S16LE,
 		.rate = SAMPLING_RATE,
 		.channels = 1
 	};
-
+	
 	pa_simple *s = NULL;
 	SDL_Surface *screen = NULL;
 	SDL_Event event;
 
-	int error, counter = 0, fd = -1;
+	int error, counter = 0, fd = -1, fn_num;
 	int16_t * pcm_data;
-	complex_t * dft_data;
+	complex * fft_data;
+        fftw_plan fft_plan;
 
 	/* init fnordlichts */
 	if (argc > 1) {
@@ -95,6 +188,10 @@ int main(int argc, char *argv[]) {
 		}
 
 		fn_init(fd);
+		fn_sync(fd);
+		fn_num = fn_count_devices(fd);
+		printf("found %d fnordlichts\n", fn_num);
+		usleep(25000);
 	}
 
 	/* init screen & window */
@@ -105,23 +202,24 @@ int main(int argc, char *argv[]) {
 
 	/* open sdl window */
 	SDL_WM_SetCaption(TITLE, NULL);
-	screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT, 16, SDL_SWSURFACE|SDL_ANYFORMAT|SDL_RESIZABLE);
+	screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT, 16, SDL_SWSURFACE|SDL_ANYFORMAT);
 	if (screen == NULL) {
 		fprintf(stderr, "Unable to set video: %s\n", SDL_GetError());
 		exit(-1);
 	}
 
-	/* allocate buffers */
-	pcm_data = malloc(BUFFER_SIZE * sizeof(int16_t));
-	dft_data = malloc(BUFFER_SIZE * sizeof(complex_t));
+	/* init fftw & get buffers*/
+	pcm_data = (int16_t *) malloc(N * sizeof (int16_t));
+        fft_data = (complex *) fftw_malloc(N * sizeof (complex));
+	fft_plan = fftw_plan_dft_1d(N, fft_data, fft_data, FFTW_FORWARD, 0);
 
-	/* open the recording stream */
+	/* Create the recording stream */
 	if (!(s = pa_simple_new(NULL, TITLE, PA_STREAM_RECORD, NULL, "record", &ss, NULL, NULL, &error))) {
 		fprintf(stderr, __FILE__": pa_simple_new() failed: %s\n", pa_strerror(error));
 		exit(-1);
 	}
 	pa_simple_flush(s, &error); /* flush audio buffer */
-
+	
 	while (1) {
 		counter++;
 
@@ -134,24 +232,41 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* read PCM audio data */
-		if (pa_simple_read(s, pcm_data, sizeof(pcm_data[0]) * BUFFER_SIZE, &error) < 0) {
+		if (pa_simple_read(s, pcm_data, N * sizeof (int16_t), &error) < 0) {
 			fprintf(stderr, __FILE__": pa_simple_read() failed: %s\n", pa_strerror(error));
 			exit(-1);
 		}
 
-		/* do the dft and show spectrum */
-		dft(pcm_data, dft_data, BUFFER_SIZE);
-		show_spectrum(screen, dft_data);
-		
-		/*int i;
-		for (i = 0; i < BUFFER_SIZE; i++) {
-			printf("%d ", pcm_data[i]);
+		/* analyse audio data */
+		int16_t index, max = 0;
+		uint32_t sum = 0;
+		float level;
+		for (index = 0; index < N; index++) {
+			sum += abs(pcm_data[index]);
+			if (abs(pcm_data[index]) > max) max = pcm_data[index];
+
+			fft_data[index] = (double) pcm_data[index];
 		}
-		printf("\n\n");*/
+		
+		/* execute fftw plan */
+		fftw_execute(fft_plan);
+		level = (float) sum / (N * pow(2, 15)) * 2;
+		
+		//if (counter % 2 == 0) fade_spectrum(fd, fft_data, fn_num);
+		if (level > 0.05) fade_level(fd, level);
+
+		show_spectrum(screen, fft_data);
+		show_level(screen, level);		
+		SDL_Flip(screen);
+
+		//printf("level: %f \tsum: %d\t max: %d\n", level, sum, max);
 	}
 
 	/* housekeeping */
 	SDL_Quit();
+	free(pcm_data);
+	fftw_free(fft_data);
+	fftw_cleanup();
 
 	return 0;
 }

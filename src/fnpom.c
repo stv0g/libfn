@@ -8,7 +8,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "../lib/libfn.h"
+#include "libfn.h"
 
 char * http_get_body(char * response) {
 	char * body;
@@ -60,7 +60,7 @@ char * http_get(char * response, size_t bytes, char * host, char * port, char * 
 	send(sd, request, strlen(request), 0);
 
 	/* receive data */
-	while (count = recv(sd, response, bytes, 0) > 0)
+	while ( (count = recv(sd, response, bytes, 0)) > 0)
 	if (count < 0) {
 		perror("Error receiving data");
 		exit(-1);
@@ -84,8 +84,8 @@ int main(int argc, char * argv[]) {
 	struct json_tokener * json_tok;
 	struct json_object * json_obj;
 	struct termios oldtio;
-	struct rgb_color_t start = {0, 0xff, 0};
-	struct rgb_color_t end = {0xff, 0, 0};
+	struct rgb_color_t start = {{{0, 0xff, 0}}};
+	struct rgb_color_t end = {{{0xff, 0, 0}}};
 
 	/* build url path */
 	sprintf(url, "%s/%s.json?from=last%%20year&tuples=1", path, uuid); /* store request uri in buffer */
@@ -140,13 +140,13 @@ int main(int argc, char * argv[]) {
 	fn_sync(fd);
 	usleep(25000);
 
-	struct remote_msg_fade_rgb_t fn_cmd = {
-		255,			/* address */
-		REMOTE_CMD_FADE_RGB,	/* command */
-		255,			/* step */
-		0,			/* delay */
-		gradient		/* color */
-	};
+	struct remote_msg_t fn_cmd;
+	fn_cmd.address = 255;
+	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
+	
+	fn_cmd.fade_rgb.step = 255;
+	fn_cmd.fade_rgb.delay = 0;
+	fn_cmd.fade_rgb.color = gradient;
 
 	if (fn_send(fd, (struct remote_msg_t *) &fn_cmd) < 0) {
 		perror(device);

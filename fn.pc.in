@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: control your fnordlichts
+Description: This library is used to control one ore more fnordlichts.
+Version: @PACKAGE_VERSION@
+Libs: -L${libdir} -lfn
+Cflags: -I${includedir}

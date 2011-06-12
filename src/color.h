@@ -26,8 +26,7 @@
 #ifndef COLOR_H
 #define COLOR_H
 
-struct rgb_color_t
-{
+struct rgb_color_t {
     union {
         struct {
             uint8_t red;
@@ -49,8 +48,7 @@ struct rgb_color_offset_t {
     };
 };
 
-struct hsv_color_t
-{
+struct hsv_color_t {
     union {
         struct {
             uint16_t hue;
@@ -67,15 +65,12 @@ struct hsv_color_offset_t {
     int8_t value;
 };
 
-struct dual_color_t
-{
+struct dual_color_t {
     struct rgb_color_t rgb;
     struct hsv_color_t hsv;
 };
 
-union color_t
-{
-    /* rgb */
+union color_t {
     struct {
         union {
             struct {
@@ -87,15 +82,14 @@ union color_t
         };
         /* marker, 0xff if rgb */
         uint8_t rgb_marker;
-    };
+    } rgb;
 
-    /* hsv */
     struct {
         uint8_t saturation;
         uint8_t value;
         /* 0 <= hue <= 349, otherwise rgb might be assumed */
         uint16_t hue;
-    };
+    } hsv;
 };
 
 #endif

@@ -1,0 +1,5 @@
+libfn and its tools are written by Steffen Vogel <info@steffenvogel.de>
+and licenced under GPLv3 or newer.
+
+Some header files are based on the original firmware from Alexander Neumann <alexander@bumpern.de>
+(https://github.com/fd0/fnordlicht/)

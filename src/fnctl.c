@@ -9,15 +9,10 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "../lib/libfn.h"
+#include "libfn.h"
 
-/* local commands (>= 0xA0) */
-#define LOCAL_CMD_EEPROM 0xA0
-#define LOCAL_CMD_COUNT 0xA1
-
-#define DEFAULT_HOST "localhost"
-#define DEFAULT_PORT "7970"
 #define DEFAULT_DEVICE "/dev/ttyUSB0"
+#define DEFAULT_PORT "7909"
 
 struct command_t {
 	char * name;
@@ -41,7 +36,7 @@ static struct command_t commands[] = {
 	{"reset", "reset fnordlichter", REMOTE_CMD_BOOTLOADER},
 	{"eeprom", "put sequence to EEPROM", LOCAL_CMD_EEPROM},
 	{"count", "count modules on the bus", LOCAL_CMD_COUNT},
-	{0}	/* stop condition for iterator */
+	{NULL} /* stop condition for iterator */
 };
 
 static struct option long_options[] = {
@@ -60,8 +55,28 @@ static struct option long_options[] = {
 	{"host",	required_argument,	0,		'H'},
 	{"filename",	required_argument,	0,		'F'},
 	{"verbose",	no_argument,		0,		'v'},
-	{0}  /* stop condition for iterator */
+	{NULL} /* stop condition for iterator */
 };
+
+static char * long_options_descs[] = {
+	"delay between steps when fading (in 10ms)",
+	"increment step for fading (1-255)",
+	"address of fnordlicht (0-254, 255 for broadcast)",
+	"string of '0' and '1' (ex. \"01010101\")",
+	"slot in the EEPROM (0-59)",
+	"time to wait before fading to next color (in 100ms)",
+	"color in RGB hex format without leading # (ex. \"1c1c1c\")",
+	"index of the first color (0-254, only for replay)",
+	"index of the last color (1-255, included, only for replay)",
+	"configure repetition",
+	"show this help",
+	"serial port or TCP port if --host is specified",
+	"hostname or IP of terminal server",
+	"with replay eeprom",
+	"enable verbose output",
+	NULL /* stop condition for iterator */
+};
+	
 
 struct rgb_color_t parse_color(char * identifier) {
 	struct rgb_color_t color;
@@ -84,7 +99,7 @@ void print_cmd(struct remote_msg_t * msg) {
 }
 
 void usage(char ** argv) {
-	printf("usage: %s command [options]\n\n", argv[0]);
+	printf("usage: fnctl command [options]\n\n");
 	printf("  following commands are available:\n");
 
 	struct command_t * cp = commands;
@@ -97,9 +112,11 @@ void usage(char ** argv) {
 	printf("  following options are available\n");
 
 	struct option * op = long_options;
-	while (op->name) {
-		printf("\t--%s,%s-%c\n", op->name, (strlen(op->name) < 5) ? "\t\t" : "\t", op->val);
+	char ** desc = long_options_descs;
+	while (op->name && desc) {
+		printf("\t-%c, --%s\t%s\n", op->val, op->name, *desc);
 		op++;
+		desc++;
 	}
 }
 
@@ -111,18 +128,18 @@ int main(int argc, char ** argv) {
 	uint8_t delay = 0;
 	uint8_t pause = 0;
 
-	char mask[254] = "";
+	char mask[255] = "";
 	char filename[1024] = "";
 
-	char host[255] = DEFAULT_HOST;
-	char port[255] = DEFAULT_PORT;
-	char device[255] = DEFAULT_DEVICE;
+	char host[255] = "";
+	char port[255] = DEFAULT_DEVICE;
 	int verbose = 0;
 
 	struct rgb_color_t color;
 	struct remote_msg_t msg;
 	union program_params_t params;
-	memset(&msg, 0, sizeof msg);
+	memset(&msg, 0, sizeof(struct remote_msg_t));
+	memset(&params, 0, sizeof(union program_params_t));
 
 	/* connection */
 	enum connection_t con_mode = RS232;
@@ -134,7 +151,7 @@ int main(int argc, char ** argv) {
 	if (argc <= 1) {
 		fprintf(stderr, "command required\n");
 		usage(argv);
-		exit(-1);
+		exit(EXIT_FAILURE);
 	}
 
 	struct command_t * cp = commands;
@@ -202,7 +219,7 @@ int main(int argc, char ** argv) {
 				}
 				else {
 					fprintf(stderr, "invalid --repeat value: %s\n", optarg);
-					exit(-1);
+					exit(EXIT_FAILURE);
 				}
 				break;
 
@@ -212,7 +229,8 @@ int main(int argc, char ** argv) {
 					strcpy(port, optarg + 1);
 					strncpy(host, optarg, ps - optarg);
 				}
-				else { /* without port */
+				else { /* without port, use default */
+					strcpy(port, DEFAULT_PORT);
 					strcpy(host, optarg);
 				}
 				con_mode = NET;
@@ -234,7 +252,7 @@ int main(int argc, char ** argv) {
 			case 'h':
 			case '?':
 				usage(argv);
-				exit((c == '?') ? -1 : 0);
+				exit((c == '?') ? EXIT_FAILURE : EXIT_SUCCESS);
 		}
 	}
 
@@ -251,15 +269,15 @@ int main(int argc, char ** argv) {
 		connect(fd, res->ai_addr, res->ai_addrlen);
 		if (fd < 0) {
 			perror(host);
-			exit(-1);
+			exit(EXIT_FAILURE);
 		}
 	}
 	else {
-		if (verbose) printf("connect via rs232: %s\n", device);
-		fd = open(device, O_RDWR | O_NOCTTY);
+		if (verbose) printf("connect via rs232: %s\n", port);
+		fd = open(port, O_RDWR | O_NOCTTY);
 		if (fd < 0) {
 			perror(port);
-			exit(-1);
+			exit(EXIT_FAILURE);
 		}
 		oldtio = fn_init(fd);
 	}
@@ -270,7 +288,7 @@ int main(int argc, char ** argv) {
 	/* check address */
 	if (address > FN_MAX_DEVICES+1) {
 		fprintf(stderr, "sorry, the fnordlicht bus can't address more the %d devices\n", FN_MAX_DEVICES);
-		exit(-1);
+		exit(EXIT_FAILURE);
 	}
 
 	if (verbose) printf("command: %s (%s)\n", cp->name, cp->description);
@@ -278,44 +296,33 @@ int main(int argc, char ** argv) {
 	switch (cp->cmd) {
 		/* remote commands */
 		case REMOTE_CMD_FADE_RGB: {
-			struct remote_msg_fade_rgb_t * cmsg = (void *) &msg;
-
-			cmsg->step = step;
-			cmsg->delay = delay;
-			cmsg->color = color;
-
+			msg.fade_rgb.step = step;
+			msg.fade_rgb.delay = delay;
+			msg.fade_rgb.color = color;
 			break;
 		}
 
 		case REMOTE_CMD_MODIFY_CURRENT: {
-			struct remote_msg_modify_current_t * cmsg = (void *) &msg;
+			struct rgb_color_offset_t ofs = { { {50, 50, 50} } };
 
-			struct rgb_color_offset_t ofs = {50, 50, 50};
-
-			cmsg->step = step;
-			cmsg->delay = delay;
-			cmsg->rgb = ofs;
-
+			msg.modify_current.step = step;
+			msg.modify_current.delay = delay;
+			msg.modify_current.rgb = ofs;
 			break;
 		}
 
 		case REMOTE_CMD_SAVE_RGB: {
-			struct remote_msg_save_rgb_t * cmsg = (void *) &msg;
-
-			cmsg->slot = slot;
-			cmsg->step = step;
-			cmsg->delay = delay;
-			cmsg->pause = pause;
-			cmsg->color = color;
-			
+			msg.save_rgb.slot = slot;
+			msg.save_rgb.step = step;
+			msg.save_rgb.delay = delay;
+			msg.save_rgb.pause = pause;
+			msg.save_rgb.color = color;
 			break;
 		}
 
 		case REMOTE_CMD_START_PROGRAM: {
-			struct remote_msg_start_program_t * cmsg = (void *) &msg;
-			
-			cmsg->script = 2;
-			cmsg->params = params;
+			msg.start_program.script = 2;
+			msg.start_program.params = params;
 			
 			break;
 		}
@@ -337,32 +344,33 @@ int main(int argc, char ** argv) {
 
 			if (eeprom_file == NULL) {
 				perror ("error opening eeprom file");
-				exit(-1);
+				exit(EXIT_FAILURE);
 			}
 
 			while(!feof(eeprom_file)) {
 				if (fgets(row, 1024, eeprom_file) && *row != '#') { /* ignore comments */
-					struct remote_msg_save_rgb_t msg;
+					struct remote_msg_t msg;
 					memset(&msg, 0, sizeof msg);
 					
-					msg.cmd = REMOTE_CMD_SAVE_RGB;
+					unsigned int slot, address, red, green, blue, step, delay, pause;
+					sscanf(row, "%u;%u;%2x%2x%2x;%u;%u;%u", &address, &slot, &red, &green, &blue, &step, &delay, &pause);
 					
-					sscanf(row, "%d;%d;%2x%2x%2x;%d;%d;%d",
-						(unsigned int *) &msg.slot,
-						(unsigned int *) &msg.address,
-						(unsigned int *) (&color.red),
-						(unsigned int *) (&color.green),
-						(unsigned int *) (&color.blue),
-						(unsigned int *) &msg.step,
-						(unsigned int *) &msg.delay,
-						(unsigned int *) &msg.pause
-					);
+					/* validate and set settings */
+					msg.cmd = REMOTE_CMD_SAVE_RGB;
+					msg.address = (address > 255) ? 255 : address;
+					msg.save_rgb.slot = (slot > 255) ? 255 : slot;
+					msg.save_rgb.color.red = (red > 255) ? 255 : red;
+					msg.save_rgb.color.green = (green > 255) ? 255 : green;
+					msg.save_rgb.color.blue = (blue > 255) ? 255 : blue;
+					msg.save_rgb.step = (step > 255) ? 255 : step;
+					msg.save_rgb.delay = (delay > 255) ? 255 : delay;
+					msg.save_rgb.pause = (pause > 65535) ? 65535 : pause;
 
-					int p = fn_send(fd, (struct remote_msg_t *) &msg);
-					if (verbose) print_cmd((struct remote_msg_t *) &msg);
+					int p = fn_send(fd, &msg);
+					if (verbose) print_cmd(&msg);
 					if (p < 0) {
 						fprintf(stderr, "failed on writing %d bytes to fnordlichts", REMOTE_MSG_LEN);
-						exit(-1);
+						exit(EXIT_FAILURE);
 					}
 				}
 			}
@@ -372,46 +380,40 @@ int main(int argc, char ** argv) {
 		default:
 			fprintf(stderr, "unknown subcomand: %s\n", argv[1]);
 			usage(argv);
-			exit(-1);
+			exit(EXIT_FAILURE);
 	}
 
 	/* send remote commands to bus */
 	if (cp->cmd < 0xA0) {
-		if (verbose) printf("address: %d\n", address);
-		msg.address = address;
 		msg.cmd = cp->cmd;
-
-		int c = strlen(mask);
-		if (c > 0) {
+	
+		if (strlen(mask)) { /* use mask */
 			if (verbose) printf("sending to mask: %s\n", mask);
-			int i;
-			for (i = 0; i < c; i++) {
-				if (mask[i] == '1') {
-					msg.address = i;
-					int p = fn_send(fd, &msg);
-					if (verbose) print_cmd(&msg);
-					if (p < 0) {
-						fprintf(stderr, "failed on writing %d bytes to fnordlichts", REMOTE_MSG_LEN);
-						exit(-1);
-					}
-				}
-				else if (mask[i] != '0') {
-					fprintf(stderr, "invalid mask! only '0' and '1' are allowed\n");
-					exit(-1);
-				}
+			int p = fn_send_mask(fd, mask, &msg);
+			if (p < 0) {
+				fprintf(stderr, "failed on writing %d bytes to fnordlichts", REMOTE_MSG_LEN);
+				exit(EXIT_FAILURE);
+			}
+			else if (p == 0) {
+				fprintf(stderr, "invalid mask! only '0' and '1' are allowed\n");
+				exit(EXIT_FAILURE);
 			}
 		}
-		else {
+		else { /* use single module or broadcast */
+			if (verbose) printf("address: %d\n", address);
+			msg.address = address;
+			
 			int p = fn_send(fd, &msg);
 			if (verbose) print_cmd(&msg);
 			if (p < 0) {
 				fprintf(stderr, "failed on writing %d bytes to fnordlichts", REMOTE_MSG_LEN);
-				exit(-1);
+				exit(EXIT_FAILURE);
 			}
 		}
 	}
 	
-	if (con_mode == RS232) tcsetattr(fd, TCSANOW, &oldtio);	/* reset port to old state */
+	/* reset port to old state */
+	if (con_mode == RS232) tcsetattr(fd, TCSANOW, &oldtio);
 
-	return 0;
+	return EXIT_SUCCESS;
 }
