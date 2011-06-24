@@ -1,0 +1,28 @@
+Source: libfn
+Priority: extra
+Maintainer: Steffen Vogel <info@steffenvogel.de>
+Build-Depends: debhelper (>= 7.0.50~), autotools-dev
+Standards-Version: 3.8.4
+Section: libs
+Homepage: https://github.com/fd0/fnordlicht/
+Vcs-Git: git://github.com/stv0g/libfn.git
+Vcs-Browser: https://github.com/stv0g/libfn
+
+Package: libfn-dev
+Section: libdevel
+Architecture: any
+Depends: libfn (= ${binary:Version})
+Description: Header file for libfn
+ This package includes a header file to
+ compile libfn in other programs
+
+Package: libfn
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Library for interfacing fnordlichts
+ This Package includes some quite helpful utilities:
+  libfn	is a simple c lib for controlling your fnordlichts
+  fnctl	is a sample programm which uses libfn
+  fnvum	is a vu meter to use your fnordlichts as a calvilux
+  fnpom	is a program to visualize measurements from a volkszaehler.org middleware
