@@ -117,8 +117,6 @@ struct remote_msg_config_offsets_t {
 };
 
 struct remote_msg_start_program_t {
-    uint8_t address;
-    uint8_t cmd;
     uint8_t script;
     union program_params_t params;
 };
@@ -143,8 +141,7 @@ enum startup_mode_t {
     STARTUP_PROGRAM = 1,
 };
 
-/* startup parameters including mode, size: 12 byte */
-struct startup_parameters_t {
+struct remote_msg_config_startup_t {
     enum startup_mode_t mode;
 
     union {
@@ -155,15 +152,9 @@ struct startup_parameters_t {
          * size: 11 byte */
         struct {
             uint8_t program;
-            uint8_t program_parameters[10];
+            union program_params_t program_parameters;
         };
     };
-};
-
-struct remote_msg_config_startup_t {
-    uint8_t address;
-    uint8_t cmd;
-    struct startup_parameters_t params;
 };
 
 /* bootloader commands */
@@ -203,10 +194,10 @@ struct remote_msg_boot_crc_flash_t {
 struct remote_msg_t {
     uint8_t address;
     uint8_t cmd;
-    
+
     union {
 	    uint8_t data[REMOTE_MSG_LEN-2];
-	    
+
 	    struct remote_msg_fade_rgb_t fade_rgb;
 	    struct remote_msg_fade_hsv_t fade_hsv;
 	    struct remote_msg_save_rgb_t save_rgb;
@@ -217,13 +208,13 @@ struct remote_msg_t {
 	    struct remote_msg_stop_t msg_stop;
 	    struct remote_msg_pull_int_t pull_int;
 	    struct remote_msg_modify_current_t modify_current;
-	    
+
 	    struct remote_msg_bootloader_t bootloader;
 	    struct remote_msg_boot_config_t boot_config;
 	    struct remote_msg_boot_data_t boot_data;
 	    struct remote_msg_boot_crc_check_t boot_crc_check;
 	    struct remote_msg_boot_crc_flash_t boot_crc_flash;
     };
-};
+} __attribute__ ((__packed__)); /* required to avoid padding in structure */
 
 #endif

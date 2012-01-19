@@ -32,8 +32,7 @@
 #define PROGRAM_PARAMETER_SIZE 10
 
 /* parameter structures (max 10 bytes) */
-struct colorwheel_params_t
-{
+struct colorwheel_params_t {
     uint8_t fade_step;
     uint8_t fade_delay;
     uint8_t fade_sleep;
@@ -44,8 +43,7 @@ struct colorwheel_params_t
     uint8_t value;
 };
 
-struct random_params_t
-{
+struct random_params_t {
     uint16_t seed;
     uint8_t use_address:1;
     uint8_t wait_for_fade:1;
@@ -58,8 +56,7 @@ struct random_params_t
     uint8_t min_distance;
 };
 
-struct replay_params_t
-{
+struct replay_params_t {
     uint8_t start;
     uint8_t end;
     enum {
@@ -69,8 +66,7 @@ struct replay_params_t
     } repeat;
 };
 
-union program_params_t
-{
+union program_params_t {
     /* parameters for static programs */
     uint8_t raw[PROGRAM_PARAMETER_SIZE];
     struct colorwheel_params_t colorwheel;
