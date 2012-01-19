@@ -15,6 +15,7 @@ AC_PROG_CC
 AC_CHECK_LIB([m], [abs])
 PKG_CHECK_MODULES([FNVUM_DEPS], [sdl >= 1.2.14 fftw3 >= 3.2.2 libpulse-simple >= 0.9.21])
 PKG_CHECK_MODULES([FNPOM_DEPS], [json >= 0.9])
+PKG_CHECK_MODULES([FNWEB_DEPS], [json >= 0.9 libmicrohttpd >= 0.4.6])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h netdb.h stdint.h stdlib.h string.h sys/ioctl.h sys/socket.h termios.h unistd.h])
@@ -29,7 +30,7 @@ AC_TYPE_UINT8_T
 
 # Checks for library functions.
 AC_FUNC_MALLOC
-AC_CHECK_FUNCS([memset pow socket sqrt strrchr])
+AC_CHECK_FUNCS([memset pow socket sqrt strrchr atoi])
 
 AC_CONFIG_FILES([Makefile src/Makefile fn.pc])
 AC_OUTPUT

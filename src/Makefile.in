@@ -36,7 +36,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = fnctl$(EXEEXT) fnvum$(EXEEXT) fnpom$(EXEEXT)
+bin_PROGRAMS = fnctl$(EXEEXT) fnvum$(EXEEXT) fnpom$(EXEEXT) \
+	fnweb$(EXEEXT)
 subdir = src
 DIST_COMMON = $(include_HEADERS) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in
@@ -86,6 +87,9 @@ fnpom_DEPENDENCIES = $(am__DEPENDENCIES_1)
 am_fnvum_OBJECTS = fnvum.$(OBJEXT)
 fnvum_OBJECTS = $(am_fnvum_OBJECTS)
 fnvum_DEPENDENCIES = $(am__DEPENDENCIES_1)
+am_fnweb_OBJECTS = fnweb.$(OBJEXT)
+fnweb_OBJECTS = $(am_fnweb_OBJECTS)
+fnweb_DEPENDENCIES = $(am__DEPENDENCIES_1)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -100,9 +104,9 @@ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
 SOURCES = $(libfn_la_SOURCES) $(fnctl_SOURCES) $(fnpom_SOURCES) \
-	$(fnvum_SOURCES)
+	$(fnvum_SOURCES) $(fnweb_SOURCES)
 DIST_SOURCES = $(libfn_la_SOURCES) $(fnctl_SOURCES) $(fnpom_SOURCES) \
-	$(fnvum_SOURCES)
+	$(fnvum_SOURCES) $(fnweb_SOURCES)
 HEADERS = $(include_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -134,6 +138,8 @@ FNPOM_DEPS_CFLAGS = @FNPOM_DEPS_CFLAGS@
 FNPOM_DEPS_LIBS = @FNPOM_DEPS_LIBS@
 FNVUM_DEPS_CFLAGS = @FNVUM_DEPS_CFLAGS@
 FNVUM_DEPS_LIBS = @FNVUM_DEPS_LIBS@
+FNWEB_DEPS_CFLAGS = @FNWEB_DEPS_CFLAGS@
+FNWEB_DEPS_LIBS = @FNWEB_DEPS_LIBS@
 GREP = @GREP@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -236,6 +242,8 @@ fnpom_SOURCES = fnpom.c
 fnpom_LDADD = -lfn $(FNPOM_DEPS_LIBS)
 fnvum_SOURCES = fnvum.c
 fnvum_LDADD = -lfn $(FNVUM_DEPS_LIBS)
+fnweb_SOURCES = fnweb.c
+fnweb_LDADD = -lfn $(FNWEB_DEPS_LIBS)
 all: all-am
 
 .SUFFIXES:
@@ -355,6 +363,9 @@ fnpom$(EXEEXT): $(fnpom_OBJECTS) $(fnpom_DEPENDENCIES)
 fnvum$(EXEEXT): $(fnvum_OBJECTS) $(fnvum_DEPENDENCIES) 
 	@rm -f fnvum$(EXEEXT)
 	$(LINK) $(fnvum_OBJECTS) $(fnvum_LDADD) $(LIBS)
+fnweb$(EXEEXT): $(fnweb_OBJECTS) $(fnweb_DEPENDENCIES) 
+	@rm -f fnweb$(EXEEXT)
+	$(LINK) $(fnweb_OBJECTS) $(fnweb_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -365,6 +376,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fnctl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fnpom.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fnvum.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fnweb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libfn.Plo@am__quote@
 
 .c.o:
