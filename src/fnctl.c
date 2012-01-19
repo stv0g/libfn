@@ -36,7 +36,7 @@ static struct command_t commands[] = {
 	{"reset", "reset fnordlichter", REMOTE_CMD_BOOTLOADER},
 	{"eeprom", "put sequence to EEPROM", LOCAL_CMD_EEPROM},
 	{"count", "count modules on the bus", LOCAL_CMD_COUNT},
-	{NULL} /* stop condition for iterator */
+	{} /* stop condition for iterator */
 };
 
 static struct option long_options[] = {
@@ -55,7 +55,7 @@ static struct option long_options[] = {
 	{"host",	required_argument,	0,		'H'},
 	{"filename",	required_argument,	0,		'F'},
 	{"verbose",	no_argument,		0,		'v'},
-	{NULL} /* stop condition for iterator */
+	{} /* stop condition for iterator */
 };
 
 static char * long_options_descs[] = {
@@ -76,7 +76,7 @@ static char * long_options_descs[] = {
 	"enable verbose output",
 	NULL /* stop condition for iterator */
 };
-	
+
 
 struct rgb_color_t parse_color(char * identifier) {
 	struct rgb_color_t color;
@@ -84,7 +84,7 @@ struct rgb_color_t parse_color(char * identifier) {
 	        fprintf(stderr, "invalid color definition: %s", identifier);
 	}
 
-	sscanf(identifier, "%2x%2x%2x", (unsigned int *) (&color.red), (unsigned int *) (&color.green), (unsigned int *) (&color.blue));
+	sscanf(identifier, "%2X%2X%2X", (unsigned int *) (&color.red), (unsigned int *) (&color.green), (unsigned int *) (&color.blue));
 	return color;
 }
 
@@ -93,7 +93,7 @@ void print_cmd(struct remote_msg_t * msg) {
 
 	int i;
 	for (i = 0; i < REMOTE_MSG_LEN; i++) {
-		printf("%X", *((uint8_t *) msg+i));
+		printf("%02X", *((uint8_t *) msg+i));
 	}
 	printf("\n");
 }
@@ -283,7 +283,7 @@ int main(int argc, char ** argv) {
 	}
 
 	fn_sync(fd);
-	usleep(25000);
+	usleep(25000); /* sleeping for 25ms */
 
 	/* check address */
 	if (address > FN_MAX_DEVICES+1) {
@@ -295,12 +295,11 @@ int main(int argc, char ** argv) {
 
 	switch (cp->cmd) {
 		/* remote commands */
-		case REMOTE_CMD_FADE_RGB: {
+		case REMOTE_CMD_FADE_RGB:
 			msg.fade_rgb.step = step;
 			msg.fade_rgb.delay = delay;
 			msg.fade_rgb.color = color;
 			break;
-		}
 
 		case REMOTE_CMD_MODIFY_CURRENT: {
 			struct rgb_color_offset_t ofs = { { {50, 50, 50} } };
@@ -311,22 +310,19 @@ int main(int argc, char ** argv) {
 			break;
 		}
 
-		case REMOTE_CMD_SAVE_RGB: {
+		case REMOTE_CMD_SAVE_RGB:
 			msg.save_rgb.slot = slot;
 			msg.save_rgb.step = step;
 			msg.save_rgb.delay = delay;
 			msg.save_rgb.pause = pause;
 			msg.save_rgb.color = color;
 			break;
-		}
 
-		case REMOTE_CMD_START_PROGRAM: {
+		case REMOTE_CMD_START_PROGRAM:
 			msg.start_program.script = 2;
 			msg.start_program.params = params;
-			
 			break;
-		}
-			
+
 		/* no special parameters */
 		case REMOTE_CMD_STOP:
 		case REMOTE_CMD_POWERDOWN:
@@ -337,7 +333,7 @@ int main(int argc, char ** argv) {
 		case LOCAL_CMD_COUNT:
 			printf("%d\n", fn_count_devices(fd));
 			break;
-			
+
 		case LOCAL_CMD_EEPROM: {
 			FILE *eeprom_file = fopen(filename, "r");
 			char row[1024];
@@ -351,10 +347,10 @@ int main(int argc, char ** argv) {
 				if (fgets(row, 1024, eeprom_file) && *row != '#') { /* ignore comments */
 					struct remote_msg_t msg;
 					memset(&msg, 0, sizeof msg);
-					
+
 					unsigned int slot, address, red, green, blue, step, delay, pause;
 					sscanf(row, "%u;%u;%2x%2x%2x;%u;%u;%u", &address, &slot, &red, &green, &blue, &step, &delay, &pause);
-					
+
 					/* validate and set settings */
 					msg.cmd = REMOTE_CMD_SAVE_RGB;
 					msg.address = (address > 255) ? 255 : address;
@@ -386,7 +382,7 @@ int main(int argc, char ** argv) {
 	/* send remote commands to bus */
 	if (cp->cmd < 0xA0) {
 		msg.cmd = cp->cmd;
-	
+
 		if (strlen(mask)) { /* use mask */
 			if (verbose) printf("sending to mask: %s\n", mask);
 			int p = fn_send_mask(fd, mask, &msg);
@@ -402,16 +398,19 @@ int main(int argc, char ** argv) {
 		else { /* use single module or broadcast */
 			if (verbose) printf("address: %d\n", address);
 			msg.address = address;
-			
+
 			int p = fn_send(fd, &msg);
-			if (verbose) print_cmd(&msg);
+			if (verbose) {
+				print_cmd(&msg);
+				printf("sent %i bytes to fnordlichts\n", p);
+			}
 			if (p < 0) {
 				fprintf(stderr, "failed on writing %d bytes to fnordlichts", REMOTE_MSG_LEN);
 				exit(EXIT_FAILURE);
 			}
 		}
 	}
-	
+
 	/* reset port to old state */
 	if (con_mode == RS232) tcsetattr(fd, TCSANOW, &oldtio);
 

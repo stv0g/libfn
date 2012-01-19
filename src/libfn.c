@@ -27,25 +27,29 @@ struct termios fn_init(int fd) {
 	return oldtio;
 }
 
-size_t fn_send(int fd, struct remote_msg_t * msg) {
+size_t fn_send(int fd, struct remote_msg_t *msg) {
 	return write(fd, msg, REMOTE_MSG_LEN);
 }
 
-size_t fn_send_mask(int fd, char *mask, struct remote_msg_t *msg) {
-	int i, c = strlen(mask);
+size_t fn_send_mask(int fd, const char *mask, struct remote_msg_t *msg) {
+	int i, p = 0, c = strlen(mask);
 	for (i = 0; i < c; i++) {
 		if (mask[i] == '1') {
 			msg->address = i;
-			int p = fn_send(fd, msg);
-			if (p < 0) { // TODO move error handling to main()
-				return p;
+			int q = fn_send(fd, msg);
+			if (q < 0) {
+				return q;
+			}
+			else {
+				p += q;
 			}
 		}
 		else if (mask[i] != '0') {
-			return 0;
+			return -2; /* invalid mask */
 		}
 	}
-	return i;
+
+	return p;
 }
 
 size_t fn_sync(int fd) {

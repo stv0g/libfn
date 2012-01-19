@@ -15,7 +15,7 @@
 
 struct termios fn_init(int fd);
 size_t fn_send(int fd, struct remote_msg_t * msg);
-size_t fn_send_mask(int fd, char *mask, struct remote_msg_t *msg);
+size_t fn_send_mask(int fd, const char *mask, struct remote_msg_t *msg);
 size_t fn_sync(int fd);
 int fn_get_int(int fd);
 uint8_t fn_count_devices(int fd);
