@@ -177,46 +177,41 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 		}
 		else if (strcmp(url+1, "start") == 0) { // TODO not working: padding bytes in program_params_t?
 			const char *script = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "script");
-			union program_params_t params;
+			msg.cmd = REMOTE_CMD_START_PROGRAM;
+			msg.start_program.script = (uint8_t) atoi(script);
 
 			switch (atoi(script)) {
 				case 0:
 					printf("Start program: colorwheel\n");
-					params.colorwheel.hue_start = 0;
-					params.colorwheel.hue_step = 60;
-					params.colorwheel.add_addr = 0;
-					params.colorwheel.saturation = 255;
-					params.colorwheel.value = 255;
+					msg.start_program.params.colorwheel.hue_start = 0;
+					msg.start_program.params.colorwheel.hue_step = 60;
+					msg.start_program.params.colorwheel.add_addr = 0;
+					msg.start_program.params.colorwheel.saturation = 255;
+					msg.start_program.params.colorwheel.value = 255;
 
-					params.colorwheel.fade_step = 1;
-					params.colorwheel.fade_delay = 2;
-					params.colorwheel.fade_sleep = 0;
+					msg.start_program.params.colorwheel.fade_step = 1;
+					msg.start_program.params.colorwheel.fade_delay = 2;
+					msg.start_program.params.colorwheel.fade_sleep = 0;
 					break;
 
 				case 1:
 					printf("Start program: random\n");
-					params.random.seed = (uint16_t) (rand() % 0xffff);
-					params.random.use_address = 0;
-					params.random.wait_for_fade = 1;
-					params.random.min_distance = 60;
+					msg.start_program.params.random.seed = (uint16_t) (rand() % 0xffff);
+					msg.start_program.params.random.use_address = 0;
+					msg.start_program.params.random.wait_for_fade = 1;
+					msg.start_program.params.random.min_distance = 60;
 
-					params.random.saturation = 255;
-					params.random.value = 255;
+					msg.start_program.params.random.saturation = 255;
+					msg.start_program.params.random.value = 255;
 
-					params.random.fade_step = 1;
-					params.random.fade_delay = 3;
-					params.random.fade_sleep = 100;
+					msg.start_program.params.random.fade_step = 1;
+					msg.start_program.params.random.fade_delay = 2;
+					msg.start_program.params.random.fade_sleep = 3;
 					break;
 
 				default:
 					return MHD_NO;
 			}
-
-			msg.cmd = REMOTE_CMD_START_PROGRAM;
-			msg.start_program.script = atoi(script);
-			msg.start_program.params = params;
-
-			memset(&msg.start_program.params, 0xff, 3);
 		}
 		else if (strcmp(url+1, "stop") == 0) {
 			msg.cmd = REMOTE_CMD_STOP;

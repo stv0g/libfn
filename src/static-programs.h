@@ -41,7 +41,7 @@ struct colorwheel_params_t {
     int8_t add_addr;
     uint8_t saturation;
     uint8_t value;
-};
+} __attribute__ ((__packed__));
 
 struct random_params_t {
     uint16_t seed;
@@ -54,7 +54,7 @@ struct random_params_t {
     uint8_t saturation;
     uint8_t value;
     uint8_t min_distance;
-};
+} __attribute__ ((__packed__));
 
 struct replay_params_t {
     uint8_t start;

@@ -119,7 +119,7 @@ struct remote_msg_config_offsets_t {
 struct remote_msg_start_program_t {
     uint8_t script;
     union program_params_t params;
-};
+} __attribute__ ((__packed__));
 
 struct remote_msg_stop_t {
     uint8_t fade;
