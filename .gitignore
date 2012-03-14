@@ -1,6 +1,24 @@
+# object files
 *.o
 *.so
 *.a
-bin/*
-.project
-.cproject
+*.la
+*.lo
+
+
+# buildsystem
+Makefile
+stamp-h1
+libtool
+fn.pc
+autom4te.cache/
+.deps
+.libs
+
+# binaries
+src/fnctl
+src/fnvum
+src/fnpom
+src/fnweb
+src/sun
+
