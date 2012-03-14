@@ -1,7 +1,7 @@
 AM_CFLAGS= -Wall $(FNVUM_DEPS_CFLAGS) $(FNPOM_DEPS_CFLAGS)
 AM_LDFLAGS=
 
-bin_PROGRAMS = fnctl fnvum fnpom fnweb
+bin_PROGRAMS = fnctl fnvum fnpom fnweb sun
 lib_LTLIBRARIES = libfn.la
 include_HEADERS = libfn.h
 
@@ -18,3 +18,5 @@ fnvum_LDADD = -lfn $(FNVUM_DEPS_LIBS)
 
 fnweb_SOURCES = fnweb.c
 fnweb_LDADD = -lfn $(FNWEB_DEPS_LIBS)
+
+sun_SOURCES = sun.c
