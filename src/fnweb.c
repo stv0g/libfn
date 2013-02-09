@@ -1,3 +1,30 @@
+/**
+ * fnordlicht web control frontend
+ *
+ * simple ajax colorwheel frontend to control fnordlicht's
+ *
+ * @copyright	2013 Steffen Vogel
+ * @license	http://www.gnu.org/licenses/gpl.txt GNU Public License
+ * @author	Steffen Vogel <post@steffenvogel.de>
+ * @link	http://www.steffenvogel.de
+ */
+/*
+ * This file is part of libfn
+ *
+ * libfn is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * libfn is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with libfn. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -11,7 +38,7 @@
 
 #include "libfn.h"
 
-volatile bool shutdown = false;	/* will be set to TRUE in our signal handler */
+volatile bool terminate = false;/* will be set to TRUE in our signal handler */
 char *httpd_root;		/* where static HTML content is located */
 int httpd_port;			/* TCP port the webserver should listen to */
 int fnordlicht_fd;		/* file descriptor for serial port */
@@ -34,7 +61,7 @@ struct rgb_color_t parse_color(const char *identifier) {
 }
 
 void quit(int sig) {
-	shutdown = true;
+	terminate = true;
 }
 
 const char * get_filename_ext(char *filename) {
@@ -175,8 +202,21 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 			msg.fade_rgb.delay = (delay) ? atoi(delay) : 0;
 			msg.fade_rgb.color = current;
 		}
-		else if (strcmp(url+1, "start") == 0) { // TODO not working: padding bytes in program_params_t?
+		else if (strcmp(url+1, "start") == 0) {
+			/* parameters */
 			const char *script = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "script");
+
+			const char *step = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "step");
+			const char *delay = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "delay");
+			const char *sleep = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "sleep");
+
+			const char *value = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "value");
+			const char *saturation = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "saturation");
+
+			const char *use_address = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "use_address");
+			const char *wait_for_fade = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "wait_for_fade");
+			const char *min_distance = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "min_distance");
+
 			msg.cmd = REMOTE_CMD_START_PROGRAM;
 			msg.start_program.script = (uint8_t) atoi(script);
 
@@ -185,28 +225,28 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 					printf("Start program: colorwheel\n");
 					msg.start_program.params.colorwheel.hue_start = 0;
 					msg.start_program.params.colorwheel.hue_step = 60;
-					msg.start_program.params.colorwheel.add_addr = 0;
-					msg.start_program.params.colorwheel.saturation = 255;
-					msg.start_program.params.colorwheel.value = 255;
+					msg.start_program.params.colorwheel.add_addr = (use_address) ? atoi(use_address) : 1;
+					msg.start_program.params.colorwheel.saturation = (saturation) ? atoi(saturation) : 255;
+					msg.start_program.params.colorwheel.value = (value) ? atoi(value) : 255;
 
-					msg.start_program.params.colorwheel.fade_step = 1;
-					msg.start_program.params.colorwheel.fade_delay = 2;
-					msg.start_program.params.colorwheel.fade_sleep = 0;
+					msg.start_program.params.colorwheel.fade_step = (step) ? atoi(step) : 1;
+					msg.start_program.params.colorwheel.fade_delay = (delay) ? atoi(delay) : 2;
+					msg.start_program.params.colorwheel.fade_sleep = (sleep) ? atoi(sleep) : 0;
 					break;
 
 				case 1:
 					printf("Start program: random\n");
 					msg.start_program.params.random.seed = (uint16_t) (rand() % 0xffff);
-					msg.start_program.params.random.use_address = 0;
-					msg.start_program.params.random.wait_for_fade = 1;
-					msg.start_program.params.random.min_distance = 60;
+					msg.start_program.params.random.use_address = (use_address) ? atoi(use_address) : 1;
+					msg.start_program.params.random.wait_for_fade = (wait_for_fade) ? atoi(wait_for_fade) : 1;
+					msg.start_program.params.random.min_distance = (min_distance) ? atoi(min_distance) : 60;
 
-					msg.start_program.params.random.saturation = 255;
-					msg.start_program.params.random.value = 255;
+					msg.start_program.params.random.saturation = (saturation) ? atoi(saturation) : 255;
+					msg.start_program.params.random.value = (value) ? atoi(value) : 255;
 
-					msg.start_program.params.random.fade_step = 1;
-					msg.start_program.params.random.fade_delay = 2;
-					msg.start_program.params.random.fade_sleep = 3;
+					msg.start_program.params.random.fade_step = (step) ? atoi(step) : 25;
+					msg.start_program.params.random.fade_delay = (delay) ? atoi(delay) : 3;
+					msg.start_program.params.random.fade_sleep = (sleep) ? atoi(sleep) : 10;
 					break;
 
 				default:
@@ -277,7 +317,7 @@ int main(int argc, char *argv[]) {
 	srand(time(0));
 
 	/* start embedded HTTPd */
-	httpd_port = (argc == 4) ? atoi(argv[3]) : 80; /* default port */	
+	httpd_port = (argc == 4) ? atoi(argv[3]) : 80; /* default port */
 	httpd_root = argv[2];
 	printf("Starting HTTPd on port: %i with root dir: %s\n", httpd_port, httpd_root);
 
@@ -296,7 +336,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* busy loop */
-	while (!shutdown) { }
+	while (!terminate) { }
 
 	/* stop embedded HTTPd */
 	MHD_stop_daemon(httpd);

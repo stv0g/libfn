@@ -1,4 +1,32 @@
-#include <stdio.h>   /* Standard input/output definitions */
+/**
+ * fnordlicht CLI control frontend for libfn
+ *
+ * implements the fnordlicht bus protocol
+ * @see https://raw.github.com/fd0/fnordlicht/master/doc/PROTOCOL
+ *
+ * @copyright	2013 Steffen Vogel
+ * @license	http://www.gnu.org/licenses/gpl.txt GNU Public License
+ * @author	Steffen Vogel <post@steffenvogel.de>
+ * @link	http://www.steffenvogel.de
+ */
+/*
+ * This file is part of libfn
+ *
+ * libfn is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * libfn is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with libfn. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <stdio.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -15,8 +43,8 @@
 #define DEFAULT_PORT "7909"
 
 struct command_t {
-	char * name;
-	char * description;
+	char *name;
+	char *description;
 	uint8_t cmd;
 };
 
@@ -34,6 +62,7 @@ static struct command_t commands[] = {
 	{"powerdown", "power down the device", REMOTE_CMD_POWERDOWN},
 	{"config", "configure startup & offsets", REMOTE_CMD_CONFIG_OFFSETS},
 	{"reset", "reset fnordlichter", REMOTE_CMD_BOOTLOADER},
+	{"pullint", "pull down INT line", REMOTE_CMD_PULL_INT},
 	{"eeprom", "put sequence to EEPROM", LOCAL_CMD_EEPROM},
 	{"count", "count modules on the bus", LOCAL_CMD_COUNT},
 	{} /* stop condition for iterator */
@@ -50,7 +79,7 @@ static struct option long_options[] = {
 	{"start",	required_argument,	0,		'f'},
 	{"end",		required_argument,	0,		't'},
 	{"repeat",	required_argument,	0,		'r'},
-	{"help",	required_argument,	0,		'h'},
+	{"help",	no_argument,		0,		'h'},
 	{"port",	required_argument,	0,		'P'},
 	{"host",	required_argument,	0,		'H'},
 	{"filename",	required_argument,	0,		'F'},
@@ -58,7 +87,7 @@ static struct option long_options[] = {
 	{} /* stop condition for iterator */
 };
 
-static char * long_options_descs[] = {
+static char *long_options_descs[] = {
 	"delay between steps when fading (in 10ms)",
 	"increment step for fading (1-255)",
 	"address of fnordlicht (0-254, 255 for broadcast)",
@@ -98,23 +127,23 @@ void print_cmd(struct remote_msg_t * msg) {
 	printf("\n");
 }
 
-void usage(char ** argv) {
-	printf("usage: fnctl command [options]\n\n");
-	printf("  following commands are available:\n");
+void usage(char **argv) {
+	printf("Usage: fnctl command [options]\n\n");
+	printf("Commands:\n");
 
-	struct command_t * cp = commands;
+	struct command_t *cp = commands;
 	while (cp->name) {
-		printf("\t%s%s%s\n", cp->name, (strlen(cp->name) < 7) ? "\t\t" : "\t", cp->description);
+		printf("  %s%s%s\n", cp->name, (strlen(cp->name) <= 7) ? "\t\t" : "\t", cp->description);
 		cp++;
 	}
 
 	printf("\n");
-	printf("  following options are available\n");
+	printf("Options:\n");
 
-	struct option * op = long_options;
-	char ** desc = long_options_descs;
+	struct option *op = long_options;
+	char **desc = long_options_descs;
 	while (op->name && desc) {
-		printf("\t-%c, --%s\t%s\n", op->val, op->name, *desc);
+		printf("  -%c, --%s\t%s\n", op->val, op->name, *desc);
 		op++;
 		desc++;
 	}
@@ -154,7 +183,7 @@ int main(int argc, char ** argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	struct command_t * cp = commands;
+	struct command_t *cp = commands;
 	while (cp->name && strcmp(cp->name, argv[1]) != 0) {
 		cp++;
 	}
@@ -166,9 +195,8 @@ int main(int argc, char ** argv) {
 
 		int c = getopt_long(argc, argv, "hva:m:f:d:t:s:f:w:r:d:p:c:P:H:F:", long_options, &option_index);
 
-		/* Detect the end of the options. */
-		if (c == -1)
-			break;
+		/* detect the end of the options. */
+		if (c == -1) break;
 
 		switch (c) {
 			case 'a':
@@ -224,7 +252,7 @@ int main(int argc, char ** argv) {
 				break;
 
 			case 'H': {
-				char * ps = strrchr(optarg, ':');
+				char *ps = strrchr(optarg, ':');
 				if (ps) { /* with port: "localhost:1234" */
 					strcpy(port, optarg + 1);
 					strncpy(host, optarg, ps - optarg);
@@ -321,6 +349,10 @@ int main(int argc, char ** argv) {
 		case REMOTE_CMD_START_PROGRAM:
 			msg.start_program.script = 2;
 			msg.start_program.params = params;
+			break;
+
+		case REMOTE_CMD_PULL_INT:
+			msg.pull_int.delay = 5;
 			break;
 
 		/* no special parameters */

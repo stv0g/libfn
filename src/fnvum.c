@@ -1,4 +1,31 @@
-/* stdlibs */
+/**
+ * fnordlicht vu meter
+ *
+ * vizualize pulsaudio
+ * @see http://www.steffenvogel.de/2010/11/12/fnordlicht-vu-meter/
+ *
+ * @copyright	2013 Steffen Vogel
+ * @license	http://www.gnu.org/licenses/gpl.txt GNU Public License
+ * @author	Steffen Vogel <post@steffenvogel.de>
+ * @link	http://www.steffenvogel.de
+ */
+/*
+ * This file is part of libfn
+ *
+ * libfn is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * any later version.
+ *
+ * libfn is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with libfn. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -18,7 +45,7 @@
 
 #include "libfn.h"
 
-#define N		512
+#define N		2048
 #define SAMPLING_RATE	44100
 
 #define MIN_FREQ	70
@@ -27,7 +54,7 @@
 #define MIN_K		(MIN_FREQ*N/SAMPLING_RATE)
 #define MAX_K		(MAX_FREQ*N /SAMPLING_RATE)
 
-#define LINE_WIDTH	2
+#define LINE_WIDTH	1
 #define SCREEN_WIDTH	LINE_WIDTH*(MAX_K - MIN_K)
 #define SCREEN_HEIGHT	SCREEN_WIDTH/2
 #define VUM_HEIGHT	SCREEN_HEIGHT/6
@@ -44,7 +71,7 @@ struct rgb_color_t hsv2rgb(struct hsv_color_t hsv) {
 	uint16_t h = hsv.hue % 360;
 	uint8_t s = hsv.saturation;
 	uint8_t v = hsv.value;
-    
+
 	uint16_t f = ((h % 60) * 255 + 30)/60;
 	uint16_t p = (v * (255-s)+128)/255;
 	uint16_t q = ((v * (255 - (s*f+128)/255))+128)/255;
@@ -59,27 +86,27 @@ struct rgb_color_t hsv2rgb(struct hsv_color_t hsv) {
 		case 4:	rgb.red = t; rgb.green = p; rgb.blue = v; break;
 		case 5:	rgb.red = v; rgb.green = p; rgb.blue = q; break;
 	}
-	
+
 	return rgb;
 }
 
 struct rgb_color_t phasor2color(complex phasor) {
 	struct hsv_color_t hsv;
-	
+
 	hsv.hue = 180*(carg(phasor)+M_PI)/M_PI;
 	hsv.saturation = 255;
 	hsv.value = 255;
-	
+
 	return hsv2rgb(hsv);
 }
 
 struct rgb_color_t level2color(double level) {
 	struct hsv_color_t hsv;
-	
+
 	hsv.hue = level * 360;
 	hsv.saturation = 255;
 	hsv.value = 255;
-	
+
 	return hsv2rgb(hsv);
 }
 
@@ -89,16 +116,16 @@ void show_spectrum(SDL_Surface * dst, complex * fft_data) {
 	uint32_t foreground;
 	SDL_FillRect(dst, &dst->clip_rect, background);
 
-	SDL_Rect rect;	
+	SDL_Rect rect;
 	rect.w = LINE_WIDTH;
-       	
+
 	int k;
 	for (k = MIN_K; k <= MAX_K; k++) {
 		double ampl = cabs(fft_data[k]) / 500000;
 		rect.x = (k - MIN_K) * LINE_WIDTH;
 		rect.h = ampl * (SCREEN_HEIGHT - VUM_HEIGHT);
 		rect.y = (SCREEN_HEIGHT - VUM_HEIGHT) - rect.h;
-		
+
 		rgb = phasor2color(fft_data[k]);
 		foreground = SDL_MapRGB(dst->format, rgb.red, rgb.green, rgb.blue);
 
@@ -122,11 +149,11 @@ void fade_spectrum(int fd, complex * fft_data, int fn_num) {
 			ampl += cabs(fft_data[i]);
 		}
 		ampl /= 1000000*fn_num;
-		
+
 		fn_cmd.fade_rgb.color.red = 255 * ampl;
 		fn_cmd.fade_rgb.color.green = 255 * ampl;
 		fn_cmd.fade_rgb.color.blue = 255 * ampl;
-		
+
 		fn_cmd.address = k;
 		fn_send(fd, &fn_cmd);
 	}
@@ -134,7 +161,7 @@ void fade_spectrum(int fd, complex * fft_data, int fn_num) {
 
 void show_level(SDL_Surface *dst, float level) {
 	SDL_Rect rect = {0, SCREEN_HEIGHT - VUM_HEIGHT, SCREEN_WIDTH, VUM_HEIGHT};
-	
+
 	struct rgb_color_t rgb = level2color(level);
 	uint32_t background = SDL_MapRGB(dst->format, 0, 0, 0);
 	uint32_t foreground = SDL_MapRGB(dst->format, rgb.red, rgb.green, rgb.blue);
@@ -146,15 +173,16 @@ void show_level(SDL_Surface *dst, float level) {
 
 void fade_level(int fd, double level) {
 	struct remote_msg_t fn_cmd;
-	struct rgb_color_t rgb = {{{255, 255, 255}}}; // level2color(level);
+//	struct rgb_color_t rgb = {{{255, 255, 255}}};
+	struct rgb_color_t rgb = level2color(level);
 	memset(&fn_cmd, 0, sizeof(struct remote_msg_t));
-	
+
 	fn_cmd.cmd = REMOTE_CMD_FADE_RGB;
 	fn_cmd.address = 255;
-	
-	fn_cmd.fade_rgb.step = 200;
-	fn_cmd.fade_rgb.delay = 0;
-	
+
+	fn_cmd.fade_rgb.step = 60;
+	fn_cmd.fade_rgb.delay = 2;
+
 	fn_cmd.fade_rgb.color.red = rgb.red * level;
 	fn_cmd.fade_rgb.color.green = rgb.green * level;
 	fn_cmd.fade_rgb.color.blue = rgb.blue * level;
@@ -169,7 +197,7 @@ int main(int argc, char *argv[]) {
 		.rate = SAMPLING_RATE,
 		.channels = 1
 	};
-	
+
 	pa_simple *s = NULL;
 	SDL_Surface *screen = NULL;
 	SDL_Event event;
@@ -189,9 +217,16 @@ int main(int argc, char *argv[]) {
 
 		fn_init(fd);
 		fn_sync(fd);
-		fn_num = fn_count_devices(fd);
-		printf("found %d fnordlichts\n", fn_num);
-		usleep(25000);
+
+		if (argc > 2) {
+			fn_num = atoi(argv[2]);
+			printf("set to %d fnordlichts\n", fn_num);
+		}
+		else {
+			fn_num = fn_count_devices(fd);
+			printf("found %d fnordlichts\n", fn_num);
+			usleep(25000);
+		}
 	}
 
 	/* init screen & window */
@@ -253,7 +288,9 @@ int main(int argc, char *argv[]) {
 		level = (float) sum / (N * pow(2, 15)) * 2;
 		
 		//if (counter % 2 == 0) fade_spectrum(fd, fft_data, fn_num);
-		if (level > 0.05) fade_level(fd, level);
+		if (level > 0.67) fade_level(fd, 1);
+		else fade_level(fd, 0);
+		//if (level > 0.05) fade_level(fd, level);
 
 		show_spectrum(screen, fft_data);
 		show_level(screen, level);		
