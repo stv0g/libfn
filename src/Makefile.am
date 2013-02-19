@@ -1,4 +1,4 @@
-AM_CFLAGS= -Wall $(FNVUM_DEPS_CFLAGS) $(FNPOM_DEPS_CFLAGS)
+AM_CFLAGS= -Wall $(FNVUM_DEPS_CFLAGS) $(FNPOM_DEPS_CFLAGS) -g
 AM_LDFLAGS=
 
 bin_PROGRAMS = fnctl fnvum fnpom fnweb
@@ -17,4 +17,4 @@ fnvum_SOURCES = fnvum.c
 fnvum_LDADD = -lfn $(FNVUM_DEPS_LIBS)
 
 fnweb_SOURCES = fnweb.c
-fnweb_LDADD = -lfn $(FNWEB_DEPS_LIBS)
+fnweb_LDADD = -lfn -lrt $(FNWEB_DEPS_LIBS)
