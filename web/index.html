@@ -1,0 +1,45 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+       "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+	<title>fnordlichts</title>
+	<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+	<link rel="icon" href="favicon.png" type="image/png">
+	<script type="text/javascript" src="js/jquery-1.8.3.min.js"></script>
+	<script type="text/javascript" src="js/raphael-2.1.0.min.js"></script>
+	<script type="text/javascript" src="js/colorwheel.js"></script>
+	<script type="text/javascript" src="js/frontend.js"></script>
+	<link rel="stylesheet" href="css/style.css" type="text/css" />
+</head>
+<body>
+<div id="wrapper">
+	<div id="wheel"></div>
+	<p id="show_details">more...</p>
+	<div id="details" class="alpha60">
+		<table>
+			<tr><td><label>Lampen</label></td><td><div id="mask" /></td></tr>
+			<tr><td><label>Benutzer</label></td><td><div id="users" /></td></tr>
+		</table>
+		<table id="options">
+			<tr><td><label>Verz&ouml;gerung</label></td><td><input type="text" id="delay" value="5" size="3" /> (0-255, in 10ms Schritten)</td></tr>
+			<tr><td><label>Schrittweite</label></td><td><input type="text" id="step" value="8" size="3" maxlength="3" /> (0-255)</td></tr>
+			<tr><td><label>Pause</label></td><td><input type="text" id="sleep" value="10" size="3" maxlength="3" /> (0-255, in 1s Schritten)</td></tr>
+			<tr><td><label>Helligkeit</label></td><td><input type="text" id="value" value="255" size="3" maxlength="3" /> (0-255)</td></tr>
+			<tr><td><label>S&auml;ttigung</label></td><td><input type="text" id="saturation" value="255" size="3" maxlength="3" /> (0-255)</td></tr>
+			<tr><td><label>Benutze Adresse</label></td><td><input type="checkbox" id="use_address" checked="checked" /></td></tr>
+			<tr><td><label>Warte auf Fade</label></td><td><input type="checkbox" id="wait_for_fade" value="1" checked="checked" /></td></tr>
+			<tr><td><label>Stoppe vor Fade</label></td><td><input type="checkbox" id="stop_fade" value="1" /></td></tr>
+		</table>
+		<p>
+			<input type="button" onclick="fnFade(Raphael.getRGB('#000000'))" value="Aus" />
+			<input type="button" onclick="fnFade(Raphael.getRGB('#ffffff'))" value="An" />
+			<input type="button" onclick="fnStop()" value="Stop" />
+			<input type="button" onclick="fnStart(1)" value="Party" />
+			<input type="button" onclick="fnStart(0)" value="Farbrad" />
+		</p>
+	</div>
+</div>
+</form>
+
+</body>
+</html>
