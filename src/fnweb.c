@@ -33,25 +33,36 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <microhttpd.h>
+#include <sys/time.h>
 #include <time.h>
+#include <pthread.h>
+#include <microhttpd.h>
 
 #include "libfn.h"
 
 volatile bool terminate = false;/* will be set to TRUE in our signal handler */
 char *httpd_root;		/* where static HTML content is located */
 int httpd_port;			/* TCP port the webserver should listen to */
-int fnordlicht_fd;		/* file descriptor for serial port */
+int fn_fd;			/* file descriptor for serial port */
+int fn_count;
+int httpd_users = 0;
+
+pthread_cond_t listen_cond;
+pthread_mutex_t listen_mutex;
+
+struct {
+	struct rgb_color_t color;
+	int step;
+	int delay;
+} fn_last;
 
 struct rgb_color_t parse_color(const char *identifier) {
 	struct rgb_color_t color;
-	if (strlen(identifier) != 6) {
-		fprintf(stderr, "Invalid color definition: %s", identifier);
-	}
-
 	unsigned short int red, green, blue;
 
-	sscanf(identifier, "%2hX%2hX%2hX", &red, &green, &blue);
+	if (sscanf(identifier, "#%2hX%2hX%2hX", &red, &green, &blue) != 3) {
+		fprintf(stderr, "Invalid color definition: %s", identifier);
+	}
 
 	color.red = red;
 	color.green = green;
@@ -62,6 +73,11 @@ struct rgb_color_t parse_color(const char *identifier) {
 
 void quit(int sig) {
 	terminate = true;
+
+	/* unblock all waiting listeners */
+	pthread_mutex_lock(&listen_mutex);
+	pthread_cond_broadcast(&listen_cond);
+	pthread_mutex_unlock(&listen_mutex);
 }
 
 const char * get_filename_ext(char *filename) {
@@ -125,41 +141,57 @@ int load_file(const char *filename, char **result) {
 int handle_request(void *cls, struct MHD_Connection *connection, const char *url, const char *method,
 			const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls) {
 
-	static struct rgb_color_t current = {{{0, 0, 0}}}; /* start with black */
-
 	if (strcasecmp(method, "get") == 0) {
 		struct MHD_Response *response;
-		char *filename = malloc(1024); /* max path length */
+		
+		if (strcmp(url+1, "status") == 0) {
+			char status_str[256];
+			char color_str[8];
 
-		if (strcmp(url+1, "color") == 0) {
-			char *color_str = malloc(8);
-			snprintf(color_str, 7, "%02x%02x%02x\n", current.red, current.green, current.blue);
-			response = MHD_create_response_from_data(strlen(color_str), (void *) color_str, 1, 0);
-			MHD_add_response_header(response, "Content-type", "text/plain");
-		}
-		else if (strcmp(url+1, "count") == 0) {
-			char *count_str = malloc(5);
-			snprintf(count_str, 4, "%i\n", fn_count_devices(fnordlicht_fd));
-			response = MHD_create_response_from_data(strlen(count_str), (void *) count_str, 1, 0);
-			MHD_add_response_header(response, "Content-type", "text/plain");
+			/* barrier */
+			const char *comet = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "comet");
+			if (comet) {
+				struct timespec timeout;
+				clock_gettime(CLOCK_REALTIME, &timeout);
+				timeout.tv_sec += atoi(comet);
+
+				pthread_mutex_lock(&listen_mutex);
+				httpd_users++;
+				pthread_cond_timedwait(&listen_cond, &listen_mutex, &timeout);
+				httpd_users--;
+				pthread_mutex_unlock(&listen_mutex);
+			}
+
+			snprintf(color_str, 8, "#%02x%02x%02x\n", fn_last.color.red, fn_last.color.green, fn_last.color.blue);
+			snprintf(status_str, 255, "{ \"count\": %d, \"users\": %d, \"color\": { \"r\": %d, \"g\": %d, \"b\": %d, \"hex\": \"%s\"}, \"step\": %d, \"delay\": %d }\n",
+				fn_count, httpd_users,
+				fn_last.color.red, fn_last.color.green, fn_last.color.blue,
+				color_str, fn_last.step, fn_last.delay
+			);
+	
+			response = MHD_create_response_from_data(strlen(status_str), (void *) status_str, 0, 1);
+			MHD_add_response_header(response, "Content-Type", "application/json");
+
 		}
 		else { /* get file from disk */
+			char filename[1024] = "";
+
 			/* construct filename */
-			filename = getcwd(filename, 1024);
-			filename = strncat(filename, httpd_root, 1024);
-			filename = strncat(filename, (strlen(url) > 1) ? url : "/index.html", 1024);
+			strncat(filename, httpd_root, 1024);
+			strncat(filename, (strlen(url) > 1) ? url : "/index.html", 1024);
 
 			/* try to open file */
 			char *response_str;
-			int resonse_size = load_file(filename, &response_str);
-			if (resonse_size > 0) {
-				response = MHD_create_response_from_data(resonse_size, (void *) response_str, 1, 0);
-				MHD_add_response_header(response, "Content-type", get_content_type(filename));
+			int response_size = load_file(filename, &response_str);
+			if (response_size > 0) {
+				response = MHD_create_response_from_data(response_size, (void *) response_str, 1, 0);
+				MHD_add_response_header(response, "Content-Type", get_content_type(filename));
 			}
 			else {
 				const char *error_str = "<html><body><h2>File not found!</h2></body></html>";
 				fprintf(stderr, "Failed to open file: %s\n", filename);
-				response = MHD_create_response_from_data(strlen (error_str), (void *) error_str, 0, 0);
+				response = MHD_create_response_from_data(strlen(error_str), (void *) error_str, 0, 0);
+				MHD_add_response_header(response, "Content-Type", "text/html");
 			}
 		}
 
@@ -190,21 +222,35 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 			const char *step = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "step");
 			const char *delay = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "delay");
 
+			/* at least the color is required */
 			if (color == NULL) {
 				return MHD_NO;
 			}
 
-			current = parse_color(color); /* parse and updating current color */
-			printf("Fading to color: #%02x%02x%02x\n", current.red, current.green, current.blue);
+			if (color) fn_last.color = parse_color(color); /* parse and updating current color */
+			if (step) fn_last.step = atoi(step);
+			if (delay) fn_last.delay = atoi(delay);
 
 			msg.cmd = REMOTE_CMD_FADE_RGB;
-			msg.fade_rgb.step = (step) ? atoi(step) : 255;
-			msg.fade_rgb.delay = (delay) ? atoi(delay) : 0;
-			msg.fade_rgb.color = current;
+			msg.fade_rgb.step = (step) ? fn_last.step : 15;
+			msg.fade_rgb.delay = (delay) ? fn_last.delay : 5;
+			msg.fade_rgb.color = fn_last.color;
+
+			printf("Fading to color: %s\n", color);
+
+			/* unblock all waiting listeners */
+			pthread_mutex_lock(&listen_mutex);
+			pthread_cond_broadcast(&listen_cond);
+			pthread_mutex_unlock(&listen_mutex);
 		}
 		else if (strcmp(url+1, "start") == 0) {
 			/* parameters */
 			const char *script = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "script");
+
+			/* at least the color is required */
+			if (script == NULL) {
+				return MHD_NO;
+			}
 
 			const char *step = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "step");
 			const char *delay = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "delay");
@@ -224,7 +270,7 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 				case 0:
 					printf("Start program: colorwheel\n");
 					msg.start_program.params.colorwheel.hue_start = 0;
-					msg.start_program.params.colorwheel.hue_step = 60;
+					msg.start_program.params.colorwheel.hue_step = 360 / fn_count;
 					msg.start_program.params.colorwheel.add_addr = (use_address) ? atoi(use_address) : 1;
 					msg.start_program.params.colorwheel.saturation = (saturation) ? atoi(saturation) : 255;
 					msg.start_program.params.colorwheel.value = (value) ? atoi(value) : 255;
@@ -255,6 +301,7 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 		}
 		else if (strcmp(url+1, "stop") == 0) {
 			msg.cmd = REMOTE_CMD_STOP;
+			msg.msg_stop.fade = 1;
 			printf("Stop fading\n");
 		}
 		else if (strcmp(url+1, "shutdown") == 0) {
@@ -266,7 +313,7 @@ int handle_request(void *cls, struct MHD_Connection *connection, const char *url
 		}
 
 		/* send command */
-		int p = (mask) ? fn_send_mask(fnordlicht_fd, mask, &msg) : fn_send(fnordlicht_fd, &msg);
+		int p = (mask) ? fn_send_mask(fn_fd, mask, &msg) : fn_send(fn_fd, &msg);
 
 		print_cmd(&msg, sizeof(msg));
 		printf("Sent %i bytes to fnordlichts\n", p);
@@ -294,39 +341,62 @@ int main(int argc, char *argv[]) {
 	sigaction(SIGHUP, &action, NULL);	/* catch hangup signal */
 	sigaction(SIGTERM, &action, NULL);	/* catch kill signal */
 
-	if (argc < 3 || argc > 4) {
-		fprintf(stderr, "usage: fnweb SERIAL-PORT WEB-DIRECTORY [HTTPD-PORT]\n");
+	if (argc < 3 || argc > 5) {
+		fprintf(stderr, "usage: fnweb SERIAL-PORT WEB-DIRECTORY [HTTPD-PORT [FNORDLICHT-COUNT]]\n");
 		return EXIT_FAILURE;
 	}
 
 	/* connect to fnordlichts */
-	fnordlicht_fd = open(argv[1], O_RDWR | O_NOCTTY);
-	if (fnordlicht_fd < 0) {
+	fn_fd = open(argv[1], O_RDWR | O_NOCTTY);
+	if (fn_fd < 0) {
 		fprintf(stderr, "Failed to open fnordlichts: %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 	}
 
-	struct termios oldtio = fn_init(fnordlicht_fd);
-	int p = fn_sync(fnordlicht_fd);
-	if (p <= 0) {
-		fprintf(stderr, "Failed to initialize fnordlichts!\n");
-		exit(EXIT_FAILURE);
+	struct termios oldtio = fn_init(fn_fd);
+
+	if (argc >= 5) {
+		fn_count = atoi(argv[4]);
 	}
+	else {
+		fn_count = fn_count_devices(fn_fd);
+	}
+
+	/* set startup state */
+	fn_last.color.red = 0;
+	fn_last.color.green = 0;
+	fn_last.color.blue = 0;
+	fn_last.step = 255;
+	fn_last.delay = 0;
 
 	/* seed PNRG for random program */
 	srand(time(0));
 
-	/* start embedded HTTPd */
-	httpd_port = (argc == 4) ? atoi(argv[3]) : 80; /* default port */
-	httpd_root = argv[2];
-	printf("Starting HTTPd on port: %i with root dir: %s\n", httpd_port, httpd_root);
+	/* initialize listen condition */
+	pthread_cond_init(&listen_cond, NULL);
+	pthread_mutex_init(&listen_mutex, NULL);
 
+	/* start embedded HTTPd */
+	httpd_port = (argc >= 4) ? atoi(argv[3]) : 80; /* default port */
+	httpd_root = realpath(argv[2], NULL);
+
+	if (httpd_port == 0) {
+		fprintf(stderr, "Invalid HTTPd port: %s\n", argv[3]);
+		return EXIT_FAILURE;
+	}
+
+	if (httpd_root == NULL) {
+		fprintf(stderr, "Invalid HTTPd root directory: %s\n", argv[2]);
+		return EXIT_FAILURE;
+	}
+
+	printf("Starting HTTPd on port: %i with root dir: %s\n", httpd_port, httpd_root);
 	struct MHD_Daemon *httpd = MHD_start_daemon(
-		MHD_USE_THREAD_PER_CONNECTION | MHD_USE_DEBUG,
+		MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL,
 		httpd_port,
 		NULL, NULL,
 		&handle_request, NULL,
-		//MHD_OPTION_CONNECTION_LIMIT, 1,
+		MHD_OPTION_CONNECTION_LIMIT, 10,
 		MHD_OPTION_END
 	);
 
@@ -336,14 +406,29 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* busy loop */
-	while (!terminate) { }
+	int c = 0;
+	while (!terminate) {
+		if (c++ % 10 == 0) {
+			int p = fn_sync(fn_fd);
+			if (p <= 0) {
+				fprintf(stderr, "Failed to sync fnordlichts!\n");
+				return EXIT_FAILURE;
+			}
+			else {
+				printf("Fnordlicht's resynced, %d users\n", httpd_users);
+			}
+		}
+		sleep(1);
+	}
 
 	/* stop embedded HTTPd */
 	MHD_stop_daemon(httpd);
 
 	/* reset and close connection */
-	tcsetattr(fnordlicht_fd, TCSANOW, &oldtio);
-	close(fnordlicht_fd);
+	tcsetattr(fn_fd, TCSANOW, &oldtio);
+	close(fn_fd);
+
+	free(httpd_root);
 
 	return EXIT_SUCCESS;
 }
