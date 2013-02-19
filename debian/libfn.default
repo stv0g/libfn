@@ -1,0 +1,11 @@
+# Default settings for fnweb. This file is sourced by /bin/sh from
+# /etc/init.d/fnweb.
+
+# Overwrite fnordlicht count
+FN_COUNT=10
+FN_PORT=/dev/ttyUSB0
+
+HTTPD_DIR=/usr/share/libfn/web
+HTTPD_PORT=8080
+
+DAEMON_ARGS="${FN_PORT} ${HTTPD_DIR} ${HTTPD_PORT} ${FN_COUNT}"
